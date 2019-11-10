@@ -1,6 +1,6 @@
 -module(sudoku).
 -author('matusekma@gmail.com').
--vsn('2019-11-08').
+-vsn('2019-11-10').
 -export([sudoku/1]).
 %-compile(export_all).
 
@@ -57,24 +57,157 @@ osszesErtekkelKitoltEsFrissit(Allapot, {[Ertek | Lehetosegek], Field, Kitoltes, 
             MaradekLehetoseg = lists:filter(fun(Lehetoseg) -> Lehetoseg =/= Ertek end, Lehetosegek),
             case OwnValue of
                 0 -> KitoltottMezo = { MaradekLehetoseg, [Ertek|Field], Ertek, Ertek}; 
-                _ -> KitoltottMezo = { MaradekLehetoseg, Field, Ertek, Ertek} % mar benne van az ertek
+                _ -> KitoltottMezo = { MaradekLehetoseg, Field, Ertek, Ertek } % mar benne van az ertek
             end,
+            
             UjSor = setnth(ColIndex, AllapotSor, KitoltottMezo),
             KitoltottAllapot = setnth(RowIndex, Allapot, UjSor),
-            
-            AllapotCellak = feldarabolasa(KitoltottAllapot, {K, K}),   
-            AllapotSorok = KitoltottAllapot,
-            AllapotOszlopok = lists:map(fun(C) -> oszlop(KitoltottAllapot, C) end, AllValues),   
+              
+            AllapotOszlop = oszlop(KitoltottAllapot, ColIndex),
 
-            %összezippelve a lehetséges értékek a kezdeti feltételekkel
-            FrissitettAllapot = map2(fun(R, AllSor) -> lehetsegesAllapotSorra(AllSor, K, AllSor, AllapotOszlopok, AllapotCellak, R, AllValues, 1) end, AllValues, AllapotSorok),
+            FrissitettAllapot = eliminate(K, { RowIndex, ColIndex }, KitoltottMezo, UjSor, AllapotOszlop, KitoltottAllapot), 
+        
             NewAcc = megold(FrissitettAllapot, AllValues, K, SolAcc),
-
             % következő érték kipróbálása
             osszesErtekkelKitoltEsFrissit(Allapot, {Lehetosegek, Field, Kitoltes, OwnValue}, AllapotSor, RowIndex, ColIndex, AllValues, K, NewAcc).
 
-            
+eliminateFromRow(KitoltottMezo, AllapotSor, R, C, RegiAllapot) ->
+    { _, _, Kitoltes, _ } = KitoltottMezo,
+    UjSor = lists:map(fun({ Lehetosegek, Field, Ki, Value }) ->
+        { lists:filter(fun(Lehetoseg) -> Lehetoseg =/= Kitoltes end, Lehetosegek), Field, Ki, Value }   
+      end, AllapotSor),
+    setnth(R, RegiAllapot, setnth(C, UjSor, KitoltottMezo)).
 
+%% ITT LEHET MÉG GYORSÍTANI? MINT A CELLAS ELIMINATENÉL
+eliminateFromCol(KitoltottMezo, AllapotOszlop, R, C, RegiAllapot) ->
+    { _, _, Kitoltes, _ } = KitoltottMezo,
+    UjOszlop = lists:map(fun({ Lehetosegek, Field, Ki, Value }) ->
+        { lists:filter(fun(Lehetoseg) -> Lehetoseg =/= Kitoltes end, Lehetosegek), Field, Ki, Value }   
+      end, AllapotOszlop),
+       
+    UjOszlopKitoltes = setnth(R, UjOszlop, KitoltottMezo),        
+    UjAllapot = setOszlop(C, RegiAllapot, UjOszlopKitoltes, []),
+    
+    UjAllapot.
+
+
+ eliminateFromCell(KitoltottMezo, R, C, K, Allapot) -> 
+    { KitoltottLehetosegek, _, Kitoltes, _ } = KitoltottMezo,
+    % melyik cellában van
+    CellaIndex = getCellIndex(R, C, K),
+    AllapotCellak = feldarabolasa(Allapot, {K, K}), 
+    AllapotCella = lists:nth(CellaIndex, AllapotCellak),
+    UjCella = lists:map(fun({ Lehetosegek, Field, Ki, Value }) ->
+        case ki =/= Kitoltes of
+            true -> { lists:filter(fun(Lehetoseg) -> Lehetoseg =/= Kitoltes end, Lehetosegek), Field, Ki, Value };
+            false -> { KitoltottLehetosegek, Field, Ki, Value } % saját magát nem filterezzük
+        end
+      end, AllapotCella),
+    setCella(R, C, K, UjCella, Allapot).
+
+setCella(R, C, K, UjCella, Allapot) ->
+    % a cella elso sora és oszlopa
+    ElsoSorIndex = ((R-1) div K)*K + 1,
+    ElsoOszlopIndex = ((C-1) div K)*K + 1,
+
+    setCellaSoronkent(1, ElsoSorIndex, ElsoOszlopIndex, 0, K, UjCella, Allapot).
+    %Sorok = lists:sublist(Allapot, ElsoSorIndex, K)
+
+setOszlop(_, [], _, Acc) -> Acc;
+setOszlop(C, [ AllapotSor|AllapotSorok ], [OszlopElem | OszlopMaradek], Acc) -> 
+    UjAllapotSor = setnth(C, AllapotSor, OszlopElem),
+    [UjAllapotSor | setOszlop(C, AllapotSorok, OszlopMaradek, Acc)].     
+
+% cellaSorindex 0-tól indul!
+setCellaSoronkent(SorIndex, ElsoSorIndex, _, _, K, _, AllapotMaradek) when SorIndex >= (ElsoSorIndex + K) -> AllapotMaradek;
+setCellaSoronkent(AktualisSorIndex, ElsoSorIndex, ElsoOszlopIndex, CellaSorIndex, K, UjCella, [AllapotSor | AllapotMaradek]) ->
+    case AktualisSorIndex < ElsoSorIndex of
+        true -> [AllapotSor | setCellaSoronkent(AktualisSorIndex + 1, ElsoSorIndex, ElsoOszlopIndex, CellaSorIndex, K, UjCella, AllapotMaradek)];
+        false ->
+            UjCellaSor = lists:sublist(UjCella, CellaSorIndex*K + 1, K),
+            UjAllapotSor = take(AllapotSor, ElsoOszlopIndex - 1) ++ (UjCellaSor ++ lists:nthtail(ElsoOszlopIndex - 1 + K, AllapotSor)),
+            
+            [UjAllapotSor | setCellaSoronkent(AktualisSorIndex + 1, ElsoSorIndex, ElsoOszlopIndex, CellaSorIndex+1, K, UjCella, AllapotMaradek)]
+    end.
+
+
+% uj allapotot ad vissza            
+eliminate(K, { R, C }, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot) ->
+    {Lehetseges, Field, Kitoltes, OwnValue } = KitoltottMezo,
+    
+    Allapot1 = eliminateFromRow( {Lehetseges, Field, Kitoltes, OwnValue }, AllapotSor, R, C, Allapot),
+
+    Allapot2 = eliminateFromCol( {Lehetseges, Field, Kitoltes, OwnValue }, AllapotOszlop, R, C, Allapot1),
+
+    Allapot3 = eliminateFromCell( {Lehetseges, Field, Kitoltes, OwnValue }, R, C, K, Allapot2),
+
+    %s
+    SFilter = 
+        case R < K*K andalso lists:member(s, Field) of
+            true -> 
+                Allapot3Oszlop = oszlop(Allapot3, C),
+                {DelLehetosegek, DelField, DelKitoltes, DelErtek } = lists:nth(R + 1, Allapot3Oszlop),
+
+                UjDel = 
+                case Kitoltes rem 2 of
+                    1 -> { lists:filter(fun(V) -> V rem 2 =:= 0 end, DelLehetosegek), DelField, DelKitoltes, DelErtek };
+                    0 -> { lists:filter(fun(V) -> V rem 2 =:= 1 end, DelLehetosegek), DelField, DelKitoltes, DelErtek }
+                end,
+                UjOszlopDel = setnth(R+1, Allapot3Oszlop, UjDel),
+                setOszlop(C, Allapot3, UjOszlopDel, []);
+            false -> Allapot3
+        end,
+    %w
+    WFilter = case C > 1 andalso lists:member(w, Field) of
+            true -> 
+                SFilterSor = lists:nth(R, SFilter),
+                {NyugatLehetosegek, NyugatField, NyugatKitoltes, NyugatErtek } = lists:nth(C - 1, SFilterSor),
+
+                UjNyugat = 
+                case Kitoltes rem 2 of
+                    1 -> { lists:filter(fun(V) -> V rem 2 =:= 0 end, NyugatLehetosegek), NyugatField, NyugatKitoltes, NyugatErtek };
+                    0 -> { lists:filter(fun(V) -> V rem 2 =:= 1 end, NyugatLehetosegek), NyugatField, NyugatKitoltes, NyugatErtek }
+                end,
+                UjSorNyugat = setnth(C-1, SFilterSor, UjNyugat),
+                setnth(R, SFilter, UjSorNyugat);
+            false -> SFilter
+    end,
+    SNeighborFilter = 
+        case R > 1 of
+            true -> 
+                SNeigborOszlop = oszlop(WFilter, C),
+                {EszakLehetosegek, EszakField, EszakKitoltes, EszakErtek } = lists:nth(R-1, SNeigborOszlop),
+                    case lists:member(s, EszakField) of
+                        true -> 
+                            UjEszak = 
+                                case Kitoltes rem 2 of
+                                    1 -> { lists:filter(fun(V) -> V rem 2 =:= 0 end, EszakLehetosegek), EszakField, EszakKitoltes, EszakErtek };
+                                    0 -> { lists:filter(fun(V) -> V rem 2 =:= 1 end, EszakLehetosegek), EszakField, EszakKitoltes, EszakErtek }
+                                end,
+                            UjOszlopEszak = setnth(R-1, SNeigborOszlop, UjEszak),
+                            setOszlop(C, WFilter, UjOszlopEszak, []);
+                        false -> WFilter
+                    end;
+            false -> WFilter
+        end,
+        %w
+        case  C < K * K of
+                true -> 
+                    WFilterSor = lists:nth(R, SNeighborFilter),
+                    {KeletLehetosegek, KeletField, KeletKitoltes, KeletErtek } = lists:nth(C+1, WFilterSor),
+                        case lists:member(w, KeletField) of
+                            true -> 
+                                UjKelet = 
+                                case Kitoltes rem 2 of
+                                    1 -> { lists:filter(fun(V) -> V rem 2 =:= 0 end, KeletLehetosegek), KeletField, KeletKitoltes, KeletErtek };
+                                    0 -> { lists:filter(fun(V) -> V rem 2 =:= 1 end, KeletLehetosegek), KeletField, KeletKitoltes, KeletErtek }
+                                end,
+                                UjSorKelet = setnth(C+1, WFilterSor, UjKelet),
+                                setnth(R, SNeighborFilter, UjSorKelet);
+                            false -> SNeighborFilter
+                        end;
+                false -> SNeighborFilter
+        end.
 
 % currentMin kezdetben K*K + 1, ha nincs kitoltetlen, akkor R és C 0
 minKitoltetlen([], _, _, Min) -> Min;
@@ -96,12 +229,6 @@ setnth(I, [E|Rest], New) -> [E|setnth(I-1, Rest, New)].
 map2(_Pred, [], _) -> [];
 map2(Pred, [H1 | T1], [H2 | T2]) ->
     [Pred(H1, H2) | map2(Pred, T1, T2)].
-
-% sort ad vissza értékekkel, Cacc default 0
-lehetsegesAllapotSorra([], _, _WholeRow, _Cols, _Cells, _R, _AllValues, _CAcc) -> [];
-lehetsegesAllapotSorra([{Lehetseges, Field, Kitoltes, OwnValue } | AllapotSorTail], K, WholeRow, AllapotOszlopok, AllapotCellak, R, AllValues, CAcc) ->
-    MezoErtekek = ertekekAllapotra(K, { R, CAcc }, {Lehetseges, Field, Kitoltes, OwnValue }, AllValues, AllapotCellak, WholeRow, AllapotOszlopok),
-    [{MezoErtekek, Field, Kitoltes, OwnValue } | lehetsegesAllapotSorra(AllapotSorTail, K, WholeRow, AllapotOszlopok, AllapotCellak, R, AllValues, CAcc + 1)].
 
 % sort ad vissza értékekkel, Cacc default 0
 lehetsegesErtekSorra([], _, _WholeRow, _Cols, _Cells, _R, _AllValues, _CAcc) -> [];
@@ -166,91 +293,6 @@ ertekek(K, { R, C }, Field, AllValues, Cells, Row, Cols) ->
             false -> SFilter
         end. 
 
-ertekekAllapotra(K, { R, C }, {Lehetseges, Field, Kitoltes, OwnValue }, AllValues, AllapotCellak, AllapotSor, AllapotOszlopok) ->
-    AllapotOszlop = lists:nth(C, AllapotOszlopok),
-    
-    V1 = filterAllapotByConstraints( {Lehetseges, Field, Kitoltes, OwnValue }, AllapotSor, AllapotOszlop, R, C, AllValues),
-
-    V2 = filterAllapotByUnit(removeFromList(C, AllapotSor), V1),
-
-    V3 = filterAllapotByUnit(removeFromList(R, AllapotOszlop), V2),
-    
-    V4 = filterAllapotByCell(V3, { Lehetseges, Field, Kitoltes, OwnValue }, R, C, K, AllapotCellak),
-
-    % szomszédos mezők s és w értéke alapján saját értékek szűrése
-    %s
-    SFilter = 
-        case V4 =/= [] andalso R > 1 of
-            true -> 
-                {_, NorthNeighborField, _, NorthNeighborValue } = lists:nth(R-1, AllapotOszlop),
-                    case lists:member(s, NorthNeighborField) of
-                        true -> 
-                            case NorthNeighborValue of 
-                                0 -> V4;
-                                _ ->
-                                    case NorthNeighborValue rem 2 of 
-                                        1 -> lists:filter(fun(V) -> V rem 2 =:= 0 end, V4); 
-                                        0 -> lists:filter(fun(V) -> V rem 2 =:= 1 end, V4)
-                                    end
-                            end;
-                        false -> V4
-                    end;
-                false -> V4
-            end,
-        %w
-        case SFilter =/= [] andalso C < K * K of
-                true ->
-                    {_, EastNeighborField, _, EastNeighborValue } = lists:nth(C+1, AllapotSor),
-                    case lists:member(w, EastNeighborField) of
-                        true -> 
-                            case EastNeighborValue of
-                                0 -> SFilter;
-                                _ ->
-                                    case EastNeighborValue rem 2 of
-                                        1 -> lists:filter(fun(V) -> V rem 2 =:= 0 end, SFilter); 
-                                        0 -> lists:filter(fun(V) -> V rem 2 =:= 1 end, SFilter)    
-                                    end       
-                                end;
-                        false -> SFilter
-                    end;
-                false -> SFilter
-            end.
-         
-           
-
-
-%-spec filterByConstraints(Field :: field(), Row :: [field()], Col :: [field()], AllValues :: [integer()], Acc :: [integer()]) -> Values::[integer()].
-filterAllapotByConstraints(_Field, _Row, _Col, _R, _C, []) -> [];
-filterAllapotByConstraints({_Lehetseges, [], _Kitoltes, _OwnValue }, _Row, _Col, _R, _C, Values) -> Values;
-filterAllapotByConstraints( {Lehetseges, [Info | FieldTail ], Kitoltes, OwnValue }, AllapotSor, AllapotOszlop, R, C, Values) ->
-    FilteredValues = 
-        case Info of
-            e -> lists:filter(fun(V) -> V rem 2 =:= 0 end, Values); % even
-            o -> lists:filter(fun(V) -> V rem 2 =:= 1 end, Values); % odd
-            s -> 
-                {_, _, _, NeighborValue} = lists:nth(R+1, AllapotOszlop),
-                case NeighborValue of 
-                    0 -> Values;
-                    _ ->
-                         case NeighborValue rem 2 of 
-                            1 -> lists:filter(fun(V) -> V rem 2 =:= 0 end, Values); 
-                            0 -> lists:filter(fun(V) -> V rem 2 =:= 1 end, Values)
-                        end
-                end;
-            w -> 
-                 {_, _, _, NeighborValue} = lists:nth(C-1, AllapotSor),
-                case NeighborValue of 
-                    0 -> Values;
-                    _ ->
-                         case NeighborValue rem 2 of 
-                            1 -> lists:filter(fun(V) -> V rem 2 =:= 0 end, Values); 
-                            0 -> lists:filter(fun(V) -> V rem 2 =:= 1 end, Values)
-                        end
-                end;
-            Szam -> [Szam]
-        end,      
-    filterAllapotByConstraints({Lehetseges, FieldTail, Kitoltes, OwnValue }, AllapotSor, AllapotOszlop, R, C, FilteredValues).
-
 %-spec filterByConstraints(Field :: field(), Row :: [field()], Col :: [field()], AllValues :: [integer()], Acc :: [integer()]) -> Values::[integer()].
 filterByConstraints(_Field, _Row, _Col, _R, _C, []) -> [];
 filterByConstraints([], _Row, _Col, _R, _C, Values) -> Values;
@@ -293,16 +335,6 @@ filterByUnit(Unit, Values) ->
         end end, Unit),
     lists:filter(fun(V) -> not lists:member(V, UnitValues) end, Values).
 
-% A sorban/oszlopban lévő többi szám alapján szűr
-filterAllapotByUnit(_Unit, []) -> [];
-filterAllapotByUnit(AllapotUnit, Values) -> 
-    UnitValues = lists:filtermap(fun({_Lehetseges, _Field, _Kitoltes, FieldOwnValue }) -> 
-        case FieldOwnValue of
-            0 -> false; 
-            _ -> {true, FieldOwnValue} 
-        end end, AllapotUnit),
-    lists:filter(fun(V) -> not lists:member(V, UnitValues) end, Values).
-
 filterByCell([], _Mezo, _R, _C, _K, _Cells) -> [];
 filterByCell(Values, Mezo, R, C, K, Cells) -> 
     % melyik cellában van
@@ -318,25 +350,6 @@ filterByCell(Values, Mezo, R, C, K, Cells) ->
         0 ->  lists:filter(fun(V) -> not lists:member(V, CellValues) end, Values);
         Value ->
             case countValueOccurences(CellValues, Value) > 1 of  % there is more than 1 same value
-                true -> [];
-                false -> Values
-            end
-    end.
-
-filterAllapotByCell([], _Mezo, _R, _C, _K, _Cells) -> [];
-filterAllapotByCell(Values, {_Lehetseges, _Field, _Kitoltes, OwnValue }, R, C, K, AllapotCellak) -> 
-    % melyik cellában van
-    CellaIndex = getCellIndex(R, C, K),
-    AllapotCella = lists:nth(CellaIndex, AllapotCellak),
-    CellValues = lists:filtermap(fun({_, _, _, CellaFieldValue }) -> 
-        case CellaFieldValue of 
-            0 -> false;
-            _ -> {true, CellaFieldValue}
-        end end, AllapotCella),
-    case OwnValue of
-        0 ->  lists:filter(fun(V) -> not lists:member(V, CellValues) end, Values);
-        _ ->
-            case countValueOccurences(CellValues, OwnValue) > 1 of  % there is more than 1 same value
                 true -> [];
                 false -> Values
             end
