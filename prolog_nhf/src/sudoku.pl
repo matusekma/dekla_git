@@ -18,6 +18,55 @@
 :- use_module(library(lists)).
 :- use_module(library(between)).
 
+sudoku({K, F}) :-
+    K2 is K*K,
+    numlist(1, K2, AllValues), 
+        
+    feldarabolasa(F, K-K, Cells),   
+    Rows = F,
+    getCols(F, K2, 1, Cols),
+
+    lehetsegesMindenMezore(Rows, K2, 1, K, Cols, Cells, AllValues, LehetsegesMindenMezore),
+
+    KezdetiAllapot = map2(fun(LehetsegesSor, Row) -> map2(fun(Lehetosegek, Field) -> {Lehetosegek, Field, 0, getValue(Field)} end, LehetsegesSor, Row ) end, LehetsegesMindenMezore, Rows),
+  
+    megold(KezdetiAllapot, AllValues, K, []).
+
+
+lehetsegesMindenMezore([], _K2, _CurrentRowIndex, _K, _Cols, _Cells, _AllValues, []).
+lehetsegesMindenMezore([Row, Rows], K2, CurrentRowIndex, K, Cols, Cells, AllValues, [Ertekek | RestResult]) :-
+    lehetsegesErtekSorra(Row, K, Row, Cols, Cells, CurrentRowIndex, AllValues, 1, Ertekek),
+    NextRowIndex is CurrentRowIndex + 1,
+    lehetsegesMindenMezore(Rows, K2, NextRowIndex, K, Cols, Cells, AllValues, RestResult).
+     
+getCols(_Mx, K2, IndexAcc, []) :-
+    IndexAcc > K2.
+                                                                                    
+getCols(Mx, K2, IndexAcc, [Col | OtherCols]) :-
+    IndexAcc =< K2,
+    oszlop(Mx, IndexAcc, Col),
+    IndexAcc1 is IndexAcc + 1,
+    getCols(Mx, K2, IndexAcc1, OtherCols).
+    
+setnth(1, [_|Rest], New, [New|Rest]).
+setnth(I, [E|Rest], New, [E|NewEnd]) :- 
+    I > 1,
+    I1 is I-1,
+    setnth(I1, Rest, New, NewEnd).
+                
+% map 2 lists paralelly
+map2(_Pred, [], _, []).
+map2(Pred, [H1 | T1], [H2 | T2], Result) :-
+    call(Pred, H1, H2, Mapped),
+    Result = [Mapped | Maradek],
+    map2(Pred, T1, T2, Maradek).
+
+% sort ad vissza értékekkel, Cacc default 0
+lehetsegesErtekSorra([], _, _WholeRow, _Cols, _Cells, _R, _AllValues, _CAcc, []).
+lehetsegesErtekSorra([Field | RowTail], K, WholeRow, Cols, Cells, R, AllValues, CAcc, Ertekek) :-
+    ertekek(K, R-CAcc, Field, AllValues, Cells, WholeRow, Cols, MezoErtekek),
+    Ertekek = [MezoErtekek | MaradekMezoErtekek],
+    lehetsegesErtekSorra(RowTail, K, WholeRow, Cols, Cells, R, AllValues, CAcc + 1, MaradekMezoErtekek).
 
 ertekek(K, R-C, Field, AllValues, Cells, Row, Cols, Vals) :-
     nth1(C, Cols, Col),
