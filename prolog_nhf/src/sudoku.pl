@@ -29,21 +29,24 @@ sudoku(s(K,F), SSol) :-
     lehetsegesMindenMezore(Rows, K2, 1, K, Cols, Cells, AllValues, LehetsegesMindenMezore),
     
     kezdetiAllapot(LehetsegesMindenMezore, Rows, KezdetiAllapot),
-        
+     
+
     megold(KezdetiAllapot, AllValues, K, SSol).
 
 % SolAcc kezdetben ures tomb
 megold(Allapot, AllValues, K, SSol) :-
-    K21 = K * K + 1,    
+    K21 is K * K + 1,    
     minKitoltetlen(Allapot, 1, s(0, 0, K21), KitoltetlenHelye),
     (
         KitoltetlenHelye = s(0, 0, _) ->
+        megoldasAllapotbol(Allapot, Megoldas),
         SSol = Megoldas
     ;
         (
             KitoltetlenHelye = s(_, _, 0) ->
             false
         ;
+            s(RowIndex, ColIndex, _) = KitoltetlenHelye,
             nth1(RowIndex, Allapot, AllapotSor),
             nth1(ColIndex, AllapotSor, KitoltetlenMezo),
            
@@ -52,11 +55,223 @@ megold(Allapot, AllValues, K, SSol) :-
         
     ).
 
+megoldasAllapotbol([], []).
+megoldasAllapotbol([AllapotSor | Allapot], Megoldas) :-
+    megoldasSorAllapotSorbol(AllapotSor, MegoldasSor),
+    Megoldas = [MegoldasSor | MaradekMegoldasSor],
+    megoldasAllapotbol(Allapot, MaradekMegoldasSor).
+     
+megoldasSorAllapotSorbol([], []).
+megoldasSorAllapotSorbol([s(_, _, Kitoltes, _) | AllapotSor], MegoldasSor) :-
+    MegoldasSor = [Kitoltes | MaradekMegoldasMezo],
+    megoldasSorAllapotSorbol(AllapotSor, MaradekMegoldasMezo).
+                            
+osszesErtekkelKitoltEsFrissit(_Allapot, s([], _Field, _, _), _Sor, _RowIndex, _ColIndex, _AllValues, _K, _Sol).
+osszesErtekkelKitoltEsFrissit(Allapot, s([Ertek | Lehetosegek], Field, Kitoltes, OwnValue), AllapotSor, RowIndex, ColIndex, AllValues, K, Sol) :-
+            excludeEqual(Ertek, Lehetosegek, MaradekLehetoseg),
+            (
+                var(OwnValue) ->
+                KitoltottMezo = s(MaradekLehetoseg, [v(Ertek)|Field], Ertek, Ertek)
+            ;    
+                KitoltottMezo = s(MaradekLehetoseg, Field, Ertek, Ertek) % mar benne van az ertek
+            ),
+            
+            setnth(ColIndex, AllapotSor, KitoltottMezo, UjSor),
+            setnth(RowIndex, Allapot, UjSor, KitoltottAllapot),
+              
+            oszlop(KitoltottAllapot, ColIndex, AllapotOszlop),
+
+            eliminate(K, RowIndex-ColIndex, KitoltottMezo, UjSor, AllapotOszlop, KitoltottAllapot, FrissitettAllapot), 
+        
+            (megold(FrissitettAllapot, AllValues, K, Sol); osszesErtekkelKitoltEsFrissit(Allapot, s(Lehetosegek, Field, Kitoltes, OwnValue), AllapotSor, RowIndex, ColIndex, AllValues, K, Sol)).
+                                                                                     
+eliminate(K, R-C, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot, UjAllapot) :-
+    s(_Lehetseges, Field, Kitoltes, _OwnValue) = KitoltottMezo,
+    
+    eliminateFromRow(KitoltottMezo, AllapotSor, UjSor),
+    setnth(C, UjSor, KitoltottMezo, UjSorKitoltottMezovel),
+    setnth(R, Allapot, UjSorKitoltottMezovel, Allapot1),
+
+    eliminateFromCol(KitoltottMezo, AllapotOszlop, UjOszlop),
+    setnth(R, UjOszlop, KitoltottMezo, UjOszlopKitoltottMezovel),
+    setnth(C, Allapot1, UjOszlopKitoltottMezovel, Allapot2),
+    
+    cellElimination(KitoltottMezo, R, C, K, Allapot2, Allapot3),
+
+    %s
+    (
+        R < K*K, member(s, Field) ->
+        oszlop(Allapot3, C, Allapot3Oszlop),
+        R1 is R + 1,
+        nth1(R1, Allapot3Oszlop, s(DelLehetosegek, DelField, DelKitoltes, DelErtek)),
+        (
+            Kitoltes mod 2 =:= 1 ->
+            include(even, DelLehetosegek, DelFiltered),
+            UjDel = s(DelFiltered, DelField, DelKitoltes, DelErtek)
+        ;
+            include(odd, DelLehetosegek, DelFiltered),
+            UjDel = s(DelFiltered, DelField, DelKitoltes, DelErtek)
+        ),
+        setnth(R1, Allapot3Oszlop, UjDel, UjOszlopDel),
+        setOszlop(C, Allapot3, UjOszlopDel, SFilter)
+    ;
+        SFilter = Allapot3
+    ),   
+    (
+        C > 1, member(w, Field) ->
+        C_1 is C - 1,
+        nth1(R, SFilter, SFilterSor),
+        nth1(C_1, SFilterSor, s(NyugatLehetosegek, NyugatField, NyugatKitoltes, NyugatErtek)),
+        (
+            Kitoltes mod 2 =:= 1 ->
+            include(even, NyugatLehetosegek, NyugatFiltered),
+            UjNyugat = s(NyugatFiltered, NyugatField, NyugatKitoltes, NyugatErtek)
+        ;
+            include(odd, NyugatLehetosegek, NyugatFiltered),
+            UjNyugat = s(NyugatFiltered, NyugatField, NyugatKitoltes, NyugatErtek)
+        ),
+        setnth(C_1, SFilterSor, UjNyugat, UjSorNyugat),
+        setnth(C, SFilter, UjSorNyugat, WFilter)
+    ;
+        WFilter = SFilter
+    ),   
+    (
+        R > 1 ->
+        oszlop(WFilter, C, SNeighborOszlop),
+        R_1 is R - 1,
+        nth1(R_1, SNeighborOszlop, s(EszakLehetosegek, EszakField, EszakKitoltes, EszakErtek)),
+        (
+            member(s, EszakField) ->
+            (
+               Kitoltes mod 2 =:= 1 ->
+               include(even, EszakLehetosegek, EszakFiltered),
+               UjEszak = s(EszakFiltered, EszakField, EszakKitoltes, EszakErtek)
+            ;
+               include(odd, EszakLehetosegek, EszakFiltered),
+               UjEszak = s(EszakFiltered, EszakField, EszakKitoltes, DelErtek)
+            ),
+            setnth(R_1, SNeighborOszlop, UjEszak, UjOszlopEszak),
+            setOszlop(C, WFilter, UjOszlopEszak, SNeighborFilter)
+       ;
+            SNeighborFilter = WFilter
+       )
+    ;
+        SNeighborFilter = WFilter
+    ),
+    (
+        C < K * K ->
+        nth1(R, SNeighborFilter, WFilterSor),
+        C1 is C + 1,
+        nth1(C1, WFilterSor, s(KeletLehetosegek, KeletField, KeletKitoltes, KeletErtek)),
+        (
+            member(w, KeletField) ->
+            (
+               Kitoltes mod 2 =:= 1 ->
+               include(even, KeletLehetosegek, KeletFiltered),
+               UjKelet = s(KeletFiltered, KeletField, KeletKitoltes, KeletErtek)
+            ;
+               include(odd, KeletLehetosegek, KeletFiltered),
+               UjKelet = s(KeletFiltered, KeletField, KeletKitoltes, KeletErtek)
+            ),
+            setnth(C1, SNeighborFilter, UjKelet, UjSorKelet),
+            setOszlop(R, SNeighborFilter, UjSorKelet, UjAllapot)
+       ;
+            UjAllapot = SNeighborFilter
+       )
+    ;
+        UjAllapot = SNeighborFilter
+    ).
+    
+setOszlop(_, [], _, []).
+setOszlop(C, [ AllapotSor|AllapotSorok ], [OszlopElem | OszlopMaradek], Result) :- 
+    setnth(C, AllapotSor, OszlopElem, UjAllapotSor),
+    Result = [UjAllapotSor | Acc],
+    setOszlop(C, AllapotSorok, OszlopMaradek, Acc).
+
+% FELULIRJA A KITOLTOTT MEZOT IS!
+cellElimination(_KitoltottMezo, _R, _C, _K, [], []).
+cellElimination(KitoltottMezo, R, C, K, Allapot, UjAllapot) :-
+    s(_, _, Kitoltes, _ ) = KitoltottMezo,
+    getCellIndex(R, C, K, CellaIndex),
+    feldarabolasa(Allapot, K-K, AllapotCellak),
+    nth1(CellaIndex, AllapotCellak, AllapotCella),
+    eliminateFromCell(Kitoltes, AllapotCella, UjCella),
+    setCella(R, C, K, UjCella, Allapot, UjAllapot).
+
+eliminateFromCell(_KitoltottMezo, [], []).
+eliminateFromCell(Kitoltes, [s(Lehetosegek, Field, Ki, Value) | AllapotCella], [UjMezo | UjCellaMaradek]):-
+    (
+        integer(Ki), Ki =:= Kitoltes -> UjLehetosegek = Lehetosegek     %saját maga
+    ;
+        excludeEqual(Kitoltes, Lehetosegek, UjLehetosegek)
+    ),
+    UjMezo = s(UjLehetosegek, Field, Ki, Value),
+    eliminateFromCell(Kitoltes, AllapotCella, UjCellaMaradek).
+
+setCella(R, C, K, UjCella, Allapot, UjAllapot) :-
+    % a cella elso sora és oszlopa
+    ElsoSorIndex is ((R-1) div K)*K + 1,
+    ElsoOszlopIndex is ((C-1) div K)*K + 1,
+    setCellaSoronkent(1, ElsoSorIndex, ElsoOszlopIndex, 0, K, UjCella, Allapot, UjAllapot).    
+
+% cellaSorindex 0-tól indul!
+setCellaSoronkent(SorIndex, ElsoSorIndex, _, _, K, _, AllapotMaradek, AllapotMaradek) :- 
+    SorIndex >= ElsoSorIndex + K.
+setCellaSoronkent(AktualisSorIndex, ElsoSorIndex, ElsoOszlopIndex, CellaSorIndex, K, UjCella, [AllapotSor | AllapotMaradek], UjAllapot) :-
+    AktualisSorIndex < ElsoSorIndex + K,
+    (
+        AktualisSorIndex < ElsoSorIndex -> 
+        UjAllapot = [AllapotSor | UjAllapotMaradek],
+        AktualisSorIndex_1 = AktualisSorIndex + 1,
+        setCellaSoronkent(AktualisSorIndex_1, ElsoSorIndex, ElsoOszlopIndex, CellaSorIndex, K, UjCella, AllapotMaradek, UjAllapotMaradek)
+    ;
+        From is CellaSorIndex*K,
+        sublist(UjCella, UjCellaSor, From, K),
+        ElsoOszlopIndex_1 is ElsoOszlopIndex - 1,
+        take(AllapotSor, ElsoOszlopIndex_1, Eleje),
+        ElsoOszlopIndex_1_K is ElsoOszlopIndex_1 + K,
+        drop(AllapotSor, ElsoOszlopIndex_1_K, Vege),
+        append([UjCellaSor, Vege], Temp),
+        append([Eleje, Temp], UjAllapotSor),
+        UjAllapot = [UjAllapotSor | UjAllapotMaradek],
+        AktualisSorIndex_1 is AktualisSorIndex + 1,
+        CellaSorIndex_1 is CellaSorIndex + 1,
+        setCellaSoronkent(AktualisSorIndex_1, ElsoSorIndex, ElsoOszlopIndex, CellaSorIndex_1, K, UjCella, AllapotMaradek, UjAllapotMaradek)
+    ).  
+     
+/*sublist([], _, _, _, _, _Acc).
+sublist([_|_], From, _Length, FromAcc, _Acc) :-
+    From > FromAcc. 
+sublist([H|T], From, Length, FromAcc, Acc) :-
+    Length >= 0,
+    From =< FromAcc,
+    Acc = [H|Rest],
+    Length1 is Length - 1,
+    FromAcc is FromAcc + 1,
+    sublist(T, From, Length1, FromAcc1, Rest).*/
+                               
+% FELULIRJA A KITOLTOTT MEZOT IS!
+eliminateFromCol(_KitoltottMezo, [], []).
+eliminateFromCol(KitoltottMezo, [ s(Lehetosegek, Field, Ki, Value) | AllapotOszlop], [UjMezo | UjAllapotOszlopMaradek]) :-
+    s( _, _, Kitoltes, _ ) = KitoltottMezo,
+    excludeEqual(Kitoltes, Lehetosegek, UjLehetosegek),
+    UjMezo = s(UjLehetosegek, Field, Ki, Value),
+    eliminateFromCol(KitoltottMezo, AllapotOszlop, UjAllapotOszlopMaradek).
+
+% FELULIRJA A KITOLTOTT MEZOT IS!
+eliminateFromRow(_KitoltottMezo, [], []).
+eliminateFromRow(KitoltottMezo, [ s(Lehetosegek, Field, Ki, Value) | AllapotSor], [UjMezo | UjAllapotSorMaradek]) :-
+    s( _, _, Kitoltes, _ ) = KitoltottMezo,
+    excludeEqual(Kitoltes, Lehetosegek, UjLehetosegek),
+    UjMezo = s(UjLehetosegek, Field, Ki, Value),
+    eliminateFromRow(KitoltottMezo, AllapotSor, UjAllapotSorMaradek).   
+
 % currentMin kezdetben K*K + 1, ha nincs kitoltetlen, akkor R és C 0
 minKitoltetlen([], _, Min, Min).
 minKitoltetlen([AllapotSor | AllapotSorok], R, CurrentMin, KitoltetlenHelye) :-
     sorMinimum(AllapotSor, R, 1, CurrentMin, RowMin),
-    minKitoltetlen(AllapotSorok, R + 1, RowMin, KitoltetlenHelye).
+    R1 is R + 1,
+    minKitoltetlen(AllapotSorok, R1, RowMin, KitoltetlenHelye).
   
 sorMinimum([], _, _, CurrentMin, CurrentMin). 
 sorMinimum([AllapotMezo | AllapotSor], R, CurrentC, s(MinR, MinC, Min), RowMin) :- 
@@ -64,7 +279,7 @@ sorMinimum([AllapotMezo | AllapotSor], R, CurrentC, s(MinR, MinC, Min), RowMin) 
     length(Lehetosegek, LLength),
     CurrentC1 is CurrentC + 1,
     (
-        Min > LLength, Kitoltes =:= 0 ->
+        Min > LLength, var(Kitoltes) ->
         sorMinimum(AllapotSor, R, CurrentC1, s(R, CurrentC, LLength), RowMin)
     ;
         sorMinimum(AllapotSor, R, CurrentC1, s(MinR, MinC, Min), RowMin)
@@ -75,8 +290,8 @@ kezdetiAllapot([LehetsegesSor | LehetsegesMindenMezore], [Row | Rows], [AllapotS
     map2(allapotMezo, LehetsegesSor, Row, AllapotSor),
     kezdetiAllapot(LehetsegesMindenMezore, Rows, KezdetiAllapot).
     
-    
-allapotMezo(Lehetosegek, Field, s(Lehetosegek, Field, 0, Value)) :-
+% Kitöltés érték változó    
+allapotMezo(Lehetosegek, Field, s(Lehetosegek, Field, _Var, Value)) :-
     getValue(Field, Value).
     
 lehetsegesMindenMezore([], _K2, _CurrentRowIndex, _K, _Cols, _Cells, _AllValues, []).
@@ -139,7 +354,7 @@ ertekek(K, R-C, Field, AllValues, Cells, Row, Cols, Vals) :-
             member(s, NorthNeighbor) ->
             getValue(NorthNeighbor, NorthNeighborValue),
             (
-                NorthNeighborValue =:= 0 -> SFilter = V4
+                var(NorthNeighborValue) -> SFilter = V4
             ;    
                 (
                     NorthNeighborValue mod 2 =:= 1 ->
@@ -163,7 +378,7 @@ ertekek(K, R-C, Field, AllValues, Cells, Row, Cols, Vals) :-
             member(w, EastNeighbor) ->
             getValue(EastNeighbor, EastNeighborValue),
             (
-                EastNeighborValue =:= 0 -> Vals = SFilter
+                var(EastNeighborValue) -> Vals = SFilter
             ;    
                 (
                     EastNeighborValue mod 2 =:= 1 ->
@@ -195,7 +410,7 @@ filterByConstraints([s | FieldTail], Row, Col, R, C, Values, Result) :-
         nth1(R1, Col, Field),
         getValue(Field, Value),
         (       % if has value
-                Value =\= 0 ->
+                integer(Value) ->
                 (
                     Value mod 2 =:= 1 -> include(even, Values, FilteredValues)
                 ;
@@ -211,7 +426,7 @@ filterByConstraints([w | FieldTail], Row, Col, R, C, Values, Result) :-
         nth1(C1, Row, Field),
         getValue(Field, Value),
         (
-                Value =\= 0 ->
+                integer(Value) ->
                 (
                     Value mod 2 =:= 1 -> include(even, Values, FilteredValues);
                     % else
@@ -230,7 +445,7 @@ filterByUnit([], Values, Values).
 filterByUnit([Field | Fields], Values, Result) :-
         getValue(Field, Value),
         (
-                Value =\= 0 ->
+                integer(Value) ->
                 excludeEqual(Value, Values, Excluded),
                 filterByUnit(Fields, Excluded, Result);
                 % else
@@ -239,10 +454,11 @@ filterByUnit([Field | Fields], Values, Result) :-
 
 filterByCell([], Values, _OwnValue, Values).
 % field has no value
-filterByCell([Field | Fields], Values, 0, Result) :-
+filterByCell([Field | Fields], Values, OwnValue, Result) :-
+        var(OwnValue), % field has no value info
         getValue(Field, Value),
         (
-                Value =\= 0 ->
+                integer(Value) ->
                 excludeEqual(Value, Values, Excluded),
                 filterByUnit(Fields, Excluded, Result)
                 % else
@@ -250,7 +466,7 @@ filterByCell([Field | Fields], Values, 0, Result) :-
         ).
   
 filterByCell(Fields, Values, OwnValue, Result) :-
-        OwnValue =\= 0,
+        integer(OwnValue),
         getAllValues(Fields, [], CellValues),
         countValueOccurences(CellValues, OwnValue, 0, Occurences),
         (
@@ -284,7 +500,7 @@ equal(X, Value) :- X =:= Value.
 even(X) :- X mod 2 =:= 0.
 odd(X) :- X mod 2 =:= 1.
 
-getValue([], 0).
+getValue([], _Var).     % return unassigned if no value
 getValue([v(Info)|_Infos], Info).
 getValue([Info|Infos], Value) :-
         Info \= v(_Number),
@@ -294,7 +510,7 @@ getAllValues([], Acc, Acc).
 getAllValues([Field|Fields], Acc, Result) :-
         getValue(Field, Value),
         (
-            Value =\= 0 ->
+            integer(Value) ->
             getAllValues(Fields, [Value|Acc], Result)
         ;   getAllValues(Fields, Acc, Result)
         ).    
@@ -328,7 +544,7 @@ take([H|T], R, Acc) :-
         R > 0, 
         R1 is R-1, 
         Acc = [H|Vegebol],
-        take(T, R1, Vegebol). 
+        take(T, R1, Vegebol).
 
 /*take(L, N, P) :- prefix_length(L, P, N).
 drop(L, N, P) :- suffix_length(L, P, N).    */

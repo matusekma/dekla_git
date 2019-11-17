@@ -91,14 +91,14 @@ eliminateFromCol(KitoltottMezo, AllapotOszlop, R, C, RegiAllapot) ->
     UjAllapot.
 
 
- eliminateFromCell(KitoltottMezo, R, C, K, Allapot) -> 
+eliminateFromCell(KitoltottMezo, R, C, K, Allapot) -> 
     { KitoltottLehetosegek, _, Kitoltes, _ } = KitoltottMezo,
     % melyik cellában van
     CellaIndex = getCellIndex(R, C, K),
     AllapotCellak = feldarabolasa(Allapot, {K, K}), 
     AllapotCella = lists:nth(CellaIndex, AllapotCellak),
     UjCella = lists:map(fun({ Lehetosegek, Field, Ki, Value }) ->
-        case ki =/= Kitoltes of
+        case Ki =/= Kitoltes of
             true -> { lists:filter(fun(Lehetoseg) -> Lehetoseg =/= Kitoltes end, Lehetosegek), Field, Ki, Value };
             false -> { KitoltottLehetosegek, Field, Ki, Value } % saját magát nem filterezzük
         end
@@ -111,7 +111,6 @@ setCella(R, C, K, UjCella, Allapot) ->
     ElsoOszlopIndex = ((C-1) div K)*K + 1,
 
     setCellaSoronkent(1, ElsoSorIndex, ElsoOszlopIndex, 0, K, UjCella, Allapot).
-    %Sorok = lists:sublist(Allapot, ElsoSorIndex, K)
 
 setOszlop(_, [], _, Acc) -> Acc;
 setOszlop(C, [ AllapotSor|AllapotSorok ], [OszlopElem | OszlopMaradek], Acc) -> 
@@ -194,7 +193,7 @@ eliminate(K, { R, C }, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot) ->
         case  C < K * K of
                 true -> 
                     WFilterSor = lists:nth(R, SNeighborFilter),
-                    {KeletLehetosegek, KeletField, KeletKitoltes, KeletErtek } = lists:nth(C+1, WFilterSor),
+                    { KeletLehetosegek, KeletField, KeletKitoltes, KeletErtek } = lists:nth(C+1, WFilterSor),
                         case lists:member(w, KeletField) of
                             true -> 
                                 UjKelet = 
