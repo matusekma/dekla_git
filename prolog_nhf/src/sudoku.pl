@@ -18,23 +18,69 @@
 :- use_module(library(lists)).
 :- use_module(library(between)).
 
-sudoku({K, F}) :-
+sudoku(s(K,F), SSol) :-
     K2 is K*K,
     numlist(1, K2, AllValues), 
         
     feldarabolasa(F, K-K, Cells),   
     Rows = F,
     getCols(F, K2, 1, Cols),
-
+    
     lehetsegesMindenMezore(Rows, K2, 1, K, Cols, Cells, AllValues, LehetsegesMindenMezore),
+    
+    kezdetiAllapot(LehetsegesMindenMezore, Rows, KezdetiAllapot),
+        
+    megold(KezdetiAllapot, AllValues, K, SSol).
 
-    KezdetiAllapot = map2(fun(LehetsegesSor, Row) -> map2(fun(Lehetosegek, Field) -> {Lehetosegek, Field, 0, getValue(Field)} end, LehetsegesSor, Row ) end, LehetsegesMindenMezore, Rows),
+% SolAcc kezdetben ures tomb
+megold(Allapot, AllValues, K, SSol) :-
+    K21 = K * K + 1,    
+    minKitoltetlen(Allapot, 1, s(0, 0, K21), KitoltetlenHelye),
+    (
+        KitoltetlenHelye = s(0, 0, _) ->
+        SSol = Megoldas
+    ;
+        (
+            KitoltetlenHelye = s(_, _, 0) ->
+            false
+        ;
+            nth1(RowIndex, Allapot, AllapotSor),
+            nth1(ColIndex, AllapotSor, KitoltetlenMezo),
+           
+            osszesErtekkelKitoltEsFrissit(Allapot, KitoltetlenMezo, AllapotSor, RowIndex, ColIndex, AllValues, K, SSol)
+        )
+        
+    ).
+
+% currentMin kezdetben K*K + 1, ha nincs kitoltetlen, akkor R és C 0
+minKitoltetlen([], _, Min, Min).
+minKitoltetlen([AllapotSor | AllapotSorok], R, CurrentMin, KitoltetlenHelye) :-
+    sorMinimum(AllapotSor, R, 1, CurrentMin, RowMin),
+    minKitoltetlen(AllapotSorok, R + 1, RowMin, KitoltetlenHelye).
   
-    megold(KezdetiAllapot, AllValues, K, []).
-
-
+sorMinimum([], _, _, CurrentMin, CurrentMin). 
+sorMinimum([AllapotMezo | AllapotSor], R, CurrentC, s(MinR, MinC, Min), RowMin) :- 
+    s(Lehetosegek, _, Kitoltes, _) = AllapotMezo,
+    length(Lehetosegek, LLength),
+    CurrentC1 is CurrentC + 1,
+    (
+        Min > LLength, Kitoltes =:= 0 ->
+        sorMinimum(AllapotSor, R, CurrentC1, s(R, CurrentC, LLength), RowMin)
+    ;
+        sorMinimum(AllapotSor, R, CurrentC1, s(MinR, MinC, Min), RowMin)
+    ).
+    
+kezdetiAllapot([], _, []).
+kezdetiAllapot([LehetsegesSor | LehetsegesMindenMezore], [Row | Rows], [AllapotSor | KezdetiAllapot]) :-
+    map2(allapotMezo, LehetsegesSor, Row, AllapotSor),
+    kezdetiAllapot(LehetsegesMindenMezore, Rows, KezdetiAllapot).
+    
+    
+allapotMezo(Lehetosegek, Field, s(Lehetosegek, Field, 0, Value)) :-
+    getValue(Field, Value).
+    
 lehetsegesMindenMezore([], _K2, _CurrentRowIndex, _K, _Cols, _Cells, _AllValues, []).
-lehetsegesMindenMezore([Row, Rows], K2, CurrentRowIndex, K, Cols, Cells, AllValues, [Ertekek | RestResult]) :-
+lehetsegesMindenMezore([Row | Rows], K2, CurrentRowIndex, K, Cols, Cells, AllValues, [Ertekek | RestResult]) :-
     lehetsegesErtekSorra(Row, K, Row, Cols, Cells, CurrentRowIndex, AllValues, 1, Ertekek),
     NextRowIndex is CurrentRowIndex + 1,
     lehetsegesMindenMezore(Rows, K2, NextRowIndex, K, Cols, Cells, AllValues, RestResult).
@@ -66,7 +112,8 @@ lehetsegesErtekSorra([], _, _WholeRow, _Cols, _Cells, _R, _AllValues, _CAcc, [])
 lehetsegesErtekSorra([Field | RowTail], K, WholeRow, Cols, Cells, R, AllValues, CAcc, Ertekek) :-
     ertekek(K, R-CAcc, Field, AllValues, Cells, WholeRow, Cols, MezoErtekek),
     Ertekek = [MezoErtekek | MaradekMezoErtekek],
-    lehetsegesErtekSorra(RowTail, K, WholeRow, Cols, Cells, R, AllValues, CAcc + 1, MaradekMezoErtekek).
+    CAcc1 is CAcc + 1,
+    lehetsegesErtekSorra(RowTail, K, WholeRow, Cols, Cells, R, AllValues, CAcc1, MaradekMezoErtekek).
 
 ertekek(K, R-C, Field, AllValues, Cells, Row, Cols, Vals) :-
     nth1(C, Cols, Col),
