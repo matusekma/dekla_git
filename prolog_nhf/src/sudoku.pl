@@ -83,7 +83,13 @@ osszesErtekkelKitoltEsFrissit(Allapot, s([Ertek | Lehetosegek], Field, Kitoltes,
 
             eliminate(K, RowIndex-ColIndex, KitoltottMezo, UjSor, AllapotOszlop, KitoltottAllapot, FrissitettAllapot), 
         
-            (megold(FrissitettAllapot, AllValues, K, Sol); osszesErtekkelKitoltEsFrissit(Allapot, s(Lehetosegek, Field, Kitoltes, OwnValue), AllapotSor, RowIndex, ColIndex, AllValues, K, Sol)).
+            (
+                megold(FrissitettAllapot, AllValues, K, Sol1),
+                Sol = Sol1
+            ;
+                osszesErtekkelKitoltEsFrissit(Allapot, s(Lehetosegek, Field, Kitoltes, OwnValue), AllapotSor, RowIndex, ColIndex, AllValues, K, Sol2),
+                Sol = Sol2
+            ).
                                                                                      
 eliminate(K, R-C, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot, UjAllapot) :-
     s(_Lehetseges, Field, Kitoltes, _OwnValue) = KitoltottMezo,
@@ -94,7 +100,7 @@ eliminate(K, R-C, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot, UjAllapot) 
 
     eliminateFromCol(KitoltottMezo, AllapotOszlop, UjOszlop),
     setnth(R, UjOszlop, KitoltottMezo, UjOszlopKitoltottMezovel),
-    setnth(C, Allapot1, UjOszlopKitoltottMezovel, Allapot2),
+    setOszlop(C, Allapot1, UjOszlopKitoltottMezovel, Allapot2),
     
     cellElimination(KitoltottMezo, R, C, K, Allapot2, Allapot3),
 
@@ -131,7 +137,7 @@ eliminate(K, R-C, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot, UjAllapot) 
             UjNyugat = s(NyugatFiltered, NyugatField, NyugatKitoltes, NyugatErtek)
         ),
         setnth(C_1, SFilterSor, UjNyugat, UjSorNyugat),
-        setnth(C, SFilter, UjSorNyugat, WFilter)
+        setnth(R, SFilter, UjSorNyugat, WFilter)
     ;
         WFilter = SFilter
     ),   
@@ -173,8 +179,8 @@ eliminate(K, R-C, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot, UjAllapot) 
                include(odd, KeletLehetosegek, KeletFiltered),
                UjKelet = s(KeletFiltered, KeletField, KeletKitoltes, KeletErtek)
             ),
-            setnth(C1, SNeighborFilter, UjKelet, UjSorKelet),
-            setOszlop(R, SNeighborFilter, UjSorKelet, UjAllapot)
+            setnth(C1, WFilterSor, UjKelet, UjSorKelet),
+            setnth(R, SNeighborFilter, UjSorKelet, UjAllapot)
        ;
             UjAllapot = SNeighborFilter
        )
