@@ -39,8 +39,7 @@ megold(Allapot, AllValues, K, SSol) :-
     minKitoltetlen(Allapot, 1, s(0, 0, K21), KitoltetlenHelye),
     (
         KitoltetlenHelye = s(0, 0, _) ->
-        megoldasAllapotbol(Allapot, Megoldas),
-        SSol = Megoldas
+        megoldasAllapotbol(Allapot, SSol)
     ;
         (
             KitoltetlenHelye = s(_, _, 0) ->
@@ -66,7 +65,7 @@ megoldasSorAllapotSorbol([s(_, _, Kitoltes, _) | AllapotSor], MegoldasSor) :-
     MegoldasSor = [Kitoltes | MaradekMegoldasMezo],
     megoldasSorAllapotSorbol(AllapotSor, MaradekMegoldasMezo).
                             
-osszesErtekkelKitoltEsFrissit(_Allapot, s([], _Field, _, _), _Sor, _RowIndex, _ColIndex, _AllValues, _K, _Sol).
+osszesErtekkelKitoltEsFrissit(_Allapot, s([], _Field, _, _), _Sor, _RowIndex, _ColIndex, _AllValues, _K, _Sol) :- false.
 osszesErtekkelKitoltEsFrissit(Allapot, s([Ertek | Lehetosegek], Field, Kitoltes, OwnValue), AllapotSor, RowIndex, ColIndex, AllValues, K, Sol) :-
             excludeEqual(Ertek, Lehetosegek, MaradekLehetoseg),
             (
@@ -83,12 +82,16 @@ osszesErtekkelKitoltEsFrissit(Allapot, s([Ertek | Lehetosegek], Field, Kitoltes,
 
             eliminate(K, RowIndex-ColIndex, KitoltottMezo, UjSor, AllapotOszlop, KitoltottAllapot, FrissitettAllapot), 
         
+            
             (
                 megold(FrissitettAllapot, AllValues, K, Sol1),
-                Sol = Sol1
-            ;
-                osszesErtekkelKitoltEsFrissit(Allapot, s(Lehetosegek, Field, Kitoltes, OwnValue), AllapotSor, RowIndex, ColIndex, AllValues, K, Sol2),
-                Sol = Sol2
+                (
+                    nonvar(Sol1) -> Sol = Sol1
+                ;
+                    false
+                )
+                
+            ;   osszesErtekkelKitoltEsFrissit(Allapot, s(Lehetosegek, Field, Kitoltes, OwnValue), AllapotSor, RowIndex, ColIndex, AllValues, K, Sol)
             ).
                                                                                      
 eliminate(K, R-C, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot, UjAllapot) :-

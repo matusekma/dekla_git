@@ -1,8 +1,7 @@
 -module(sudoku).
 -author('matusekma@gmail.com').
--vsn('2019-11-10').
+-vsn('2019-11-21').
 -export([sudoku/1]).
-%-compile(export_all).
 
 -type sspec() :: {size(), board()}.
 -type size()  :: integer().
@@ -37,7 +36,9 @@ sudoku({K, F}) ->
     megold(KezdetiAllapot, AllValues, K, []).
 
 % SolAcc kezdetben ures tomb
-megold(Allapot, AllValues, K, SolAcc) ->
+megold(KezdetiAllapot, AllValues, K, SolAcc) ->
+    Allapot1 = assignHiddenSingleForRows(hd(KezdetiAllapot), 1, K, AllValues, KezdetiAllapot),
+    Allapot = assignHiddenSingleForCols(oszlop(Allapot1, 1), 1, K, AllValues, Allapot1),
     KitoltetlenHelye = minKitoltetlen(Allapot, 1, AllValues, {0, 0, K*K+1}),
     case KitoltetlenHelye of 
         {0, 0, _} -> % mind ki van toltve, kiszedjük az ennesekből a megoldást
@@ -54,10 +55,9 @@ megold(Allapot, AllValues, K, SolAcc) ->
 
 osszesErtekkelKitoltEsFrissit(_Allapot, {[], _Field, _, _}, _Sor, _RowIndex, _ColIndex, _AllValues, _K, SolAcc) -> SolAcc;
 osszesErtekkelKitoltEsFrissit(Allapot, {[Ertek | Lehetosegek], Field, Kitoltes, OwnValue}, AllapotSor, RowIndex, ColIndex, AllValues, K, SolAcc) ->
-            MaradekLehetoseg = lists:filter(fun(Lehetoseg) -> Lehetoseg =/= Ertek end, Lehetosegek),
             case OwnValue of
-                0 -> KitoltottMezo = { MaradekLehetoseg, [Ertek|Field], Ertek, Ertek}; 
-                _ -> KitoltottMezo = { MaradekLehetoseg, Field, Ertek, Ertek } % mar benne van az ertek
+                0 -> KitoltottMezo = { [], [Ertek|Field], Ertek, Ertek}; 
+                _ -> KitoltottMezo = { [], Field, Ertek, Ertek } % mar benne van az ertek
             end,
             
             UjSor = setnth(ColIndex, AllapotSor, KitoltottMezo),
@@ -70,6 +70,81 @@ osszesErtekkelKitoltEsFrissit(Allapot, {[Ertek | Lehetosegek], Field, Kitoltes, 
             NewAcc = megold(FrissitettAllapot, AllValues, K, SolAcc),
             % következő érték kipróbálása
             osszesErtekkelKitoltEsFrissit(Allapot, {Lehetosegek, Field, Kitoltes, OwnValue}, AllapotSor, RowIndex, ColIndex, AllValues, K, NewAcc).
+
+%assignHiddenSingleForRows(_, CurrentRowIndex, K, _, Allapot) when CurrentRowIndex > K*K -> Allapot;
+assignHiddenSingleForRows(ElsoSor, CurrentRowIndex, K, AllValues, ElozoAllapot) ->
+    UjAllapot = assignHiddenSingleInRow(ElsoSor, AllValues, CurrentRowIndex, K, ElozoAllapot),
+    case CurrentRowIndex + 1 =< K*K of
+        true ->
+            KovetkezoSor = lists:nth(CurrentRowIndex + 1, UjAllapot),
+            assignHiddenSingleForRows(KovetkezoSor, CurrentRowIndex + 1, K, AllValues, UjAllapot);
+        false ->
+            ElozoAllapot
+    end.
+
+assignHiddenSingleInRow(_AllapotSor, [], _R, _K, Allapot) -> Allapot;
+assignHiddenSingleInRow(AllapotSor, [Value | Values], R, K, Allapot) ->
+    case countIfOccursOnceInLists(AllapotSor, Value, 1, 0, 0) of 
+        false -> assignHiddenSingleInRow(AllapotSor, Values, R, K, Allapot);
+        {{_Lehetosegek, Field, _, OwnValue }, ColPosition} -> 
+            case OwnValue of
+                0 -> KitoltottMezo = { [], [Value|Field], Value, Value}; 
+                _ -> KitoltottMezo = { [], Field, Value, Value } % mar benne van az ertek
+            end,
+            UjSor = setnth(ColPosition, AllapotSor, KitoltottMezo),
+            KitoltottAllapot = setnth(R, Allapot, UjSor),
+            AllapotOszlop = oszlop(KitoltottAllapot, ColPosition),
+            
+            UjAllapot = eliminate(K, { R, ColPosition }, KitoltottMezo, 0, AllapotOszlop, KitoltottAllapot),
+            UjAllapotSor = lists:nth(R, UjAllapot),
+            
+            assignHiddenSingleInRow(UjAllapotSor, Values, R, K, UjAllapot)
+    end.
+
+%assignHiddenSingleForCols(_, CurrentColIndex, K, _, Allapot) when CurrentColIndex > K*K -> Allapot;
+assignHiddenSingleForCols(ElsoOszlop, CurrentColIndex, K, AllValues, ElozoAllapot) ->
+    UjAllapot = assignHiddenSingleInCol(ElsoOszlop, AllValues, CurrentColIndex, K, ElozoAllapot),
+    case CurrentColIndex + 1 =< K*K of
+        true ->
+            KovetkezoOszlop = oszlop(UjAllapot, CurrentColIndex + 1),
+            assignHiddenSingleForCols(KovetkezoOszlop, CurrentColIndex + 1, K, AllValues, UjAllapot);
+        false -> ElozoAllapot
+    end.
+
+    
+
+assignHiddenSingleInCol(_AllapotOszlop, [], _C, _K, Allapot) -> Allapot;
+assignHiddenSingleInCol(AllapotOszlop, [Value | Values], C, K, Allapot) ->
+    case countIfOccursOnceInLists(AllapotOszlop, Value, 1, 0, 0) of 
+        false -> assignHiddenSingleInCol(AllapotOszlop, Values, C, K, Allapot);
+        {{_Lehetosegek, Field, _, OwnValue }, RowPosition} -> 
+            case OwnValue of
+                0 -> KitoltottMezo = { [], [Value|Field], Value, Value}; 
+                _ -> KitoltottMezo = { [], Field, Value, Value } % mar benne van az ertek
+            end,
+            UjOszlop = setnth(RowPosition, AllapotOszlop, KitoltottMezo),
+            KitoltottAllapot = setOszlop(C, Allapot, UjOszlop, []),
+            AllapotSor = lists:nth(RowPosition, KitoltottAllapot),
+            
+            
+            UjAllapot = eliminate(K, { RowPosition, C }, KitoltottMezo, AllapotSor, 0, KitoltottAllapot),
+            UjAllapotOszlop = oszlop(UjAllapot, C),
+            
+            assignHiddenSingleInCol(UjAllapotOszlop, Values, C, K, UjAllapot)
+    end.
+
+countIfOccursOnceInLists([], _, _, FieldAndPosition, 1) -> FieldAndPosition;
+countIfOccursOnceInLists([], _, _, _, _) -> false;
+countIfOccursOnceInLists(_L, _Value, _, _, Count) when Count > 1 -> false;
+countIfOccursOnceInLists([Field|T], Value, CurrentPosition, FieldAndPosition, Count) ->
+    {Lehetosegek, _, _Kitoltes, _ } = Field,   
+    case lists:member(Value, Lehetosegek)  of
+        true ->
+            Count1 = Count + 1,
+            countIfOccursOnceInLists(T, Value, CurrentPosition + 1, {Field, CurrentPosition}, Count1);
+        false -> countIfOccursOnceInLists(T, Value, CurrentPosition + 1, FieldAndPosition, Count)
+    end.
+
 
 eliminateFromRow(KitoltottMezo, AllapotSor, R, C, RegiAllapot) ->
     { _, _, Kitoltes, _ } = KitoltottMezo,
@@ -105,6 +180,46 @@ eliminateFromCell(KitoltottMezo, R, C, K, Allapot) ->
       end, AllapotCella),
     setCella(R, C, K, UjCella, Allapot).
 
+
+eliminateByNakedPairs([], EgeszEgyseg) -> EgeszEgyseg;
+eliminateByNakedPairs([[A1, A2]| EgysegLehetosegek], EgeszEgyseg) ->
+    case countIfOccursOnce(EgysegLehetosegek, [A1, A2], 0) of
+        true -> 
+            FilteredEgyseg = lists:map(fun({ Lehetosegek, Field, Ki, Value }) ->
+                %EGESZ FILTEREZESE, DE SAJAT MAGUKAT NE
+                case Lehetosegek  of
+                    [A1,A2] -> { Lehetosegek, Field, Ki, Value };
+                    _ ->
+                    { lists:filter(fun(Lehetoseg) -> Lehetoseg =/= A1 andalso Lehetoseg =/= A2 end, Lehetosegek), Field, Ki, Value }  
+                end
+            end, EgeszEgyseg),
+            
+            eliminateByNakedPairs(EgysegLehetosegek, FilteredEgyseg);
+        false -> eliminateByNakedPairs(EgysegLehetosegek, EgeszEgyseg)
+    end;
+eliminateByNakedPairs([ _ | Egyseg], EgeszEgyseg) ->
+    eliminateByNakedPairs(Egyseg, EgeszEgyseg).
+
+
+eliminateByNakedTriplets([], EgeszEgyseg) -> EgeszEgyseg;
+eliminateByNakedTriplets([[A1, A2, A3]| EgysegLehetosegek], EgeszEgyseg) ->
+    case countIfOccursTwice(EgysegLehetosegek, [A1, A2, A3], 0) of
+        true -> 
+            FilteredEgyseg = lists:map(fun({ Lehetosegek, Field, Ki, Value }) ->
+                %EGESZ FILTEREZESE, DE SAJAT MAGUKAT NE
+                case Lehetosegek  of
+                    [A1,A2,A3] -> { Lehetosegek, Field, Ki, Value };
+                    _ ->
+                    { lists:filter(fun(Lehetoseg) -> Lehetoseg =/= A1 andalso Lehetoseg =/= A2 andalso Lehetoseg =/= A3 end, Lehetosegek), Field, Ki, Value }  
+                end
+            end, EgeszEgyseg),
+            
+            eliminateByNakedTriplets(EgysegLehetosegek, FilteredEgyseg);
+        false -> eliminateByNakedTriplets(EgysegLehetosegek, EgeszEgyseg)
+    end;
+eliminateByNakedTriplets([ _ | Egyseg], EgeszEgyseg) ->
+    eliminateByNakedTriplets(Egyseg, EgeszEgyseg).
+
 setCella(R, C, K, UjCella, Allapot) ->
     % a cella elso sora és oszlopa
     ElsoSorIndex = ((R-1) div K)*K + 1,
@@ -134,10 +249,18 @@ setCellaSoronkent(AktualisSorIndex, ElsoSorIndex, ElsoOszlopIndex, CellaSorIndex
 eliminate(K, { R, C }, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot) ->
     {Lehetseges, Field, Kitoltes, OwnValue } = KitoltottMezo,
     
-    Allapot1 = eliminateFromRow( {Lehetseges, Field, Kitoltes, OwnValue }, AllapotSor, R, C, Allapot),
+    Allapot1 =
+    case AllapotSor =/= 0 of
+        true -> eliminateFromRow( {Lehetseges, Field, Kitoltes, OwnValue }, AllapotSor, R, C, Allapot);
+        false -> Allapot
+    end,
 
-    Allapot2 = eliminateFromCol( {Lehetseges, Field, Kitoltes, OwnValue }, AllapotOszlop, R, C, Allapot1),
-
+    Allapot2 = 
+    case AllapotOszlop =/= 0 of
+        true -> eliminateFromCol( {Lehetseges, Field, Kitoltes, OwnValue }, AllapotOszlop, R, C, Allapot1);
+        false -> Allapot1
+    end,
+    
     Allapot3 = eliminateFromCell( {Lehetseges, Field, Kitoltes, OwnValue }, R, C, K, Allapot2),
 
     %s
@@ -190,7 +313,7 @@ eliminate(K, { R, C }, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot) ->
             false -> WFilter
         end,
         %w
-        case  C < K * K of
+        WNeighborFilter = case  C < K * K of
                 true -> 
                     WFilterSor = lists:nth(R, SNeighborFilter),
                     { KeletLehetosegek, KeletField, KeletKitoltes, KeletErtek } = lists:nth(C+1, WFilterSor),
@@ -206,7 +329,36 @@ eliminate(K, { R, C }, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot) ->
                             false -> SNeighborFilter
                         end;
                 false -> SNeighborFilter
-        end.
+        end,
+    
+    case K >= 1 of 
+        true ->
+
+            Sor = lists:nth(R, WNeighborFilter),
+            SorLehetosegek = lists:map(fun({ Lehetosegek, _, _, _ }) -> Lehetosegek end, Sor),
+            NakedTripletsSor = eliminateByNakedTriplets(SorLehetosegek, Sor),
+            
+            SorLehetosegek1 = lists:map(fun({ Lehetosegek, _, _, _ }) -> Lehetosegek end, NakedTripletsSor),
+            NakedPairsSor1 = eliminateByNakedPairs(SorLehetosegek1, NakedTripletsSor),
+            NakedPairsSorAllapot1 = setnth(R, WNeighborFilter, NakedPairsSor1),
+
+            Oszlop = oszlop(NakedPairsSorAllapot1, C),
+            OszlopLehetosegek = lists:map(fun({ Lehetosegek, _, _, _ }) -> Lehetosegek end, Oszlop),
+            NakedTripletsOszlop = eliminateByNakedTriplets(OszlopLehetosegek, Oszlop),
+
+            OszlopLehetosegek1 = lists:map(fun({ Lehetosegek, _, _, _ }) -> Lehetosegek end, NakedTripletsOszlop),
+            NakedPairsOszlop1 = eliminateByNakedPairs(OszlopLehetosegek1, NakedTripletsOszlop),
+            NakedPairsOszlopAllapot1 = setOszlop(C, NakedPairsSorAllapot1, NakedPairsOszlop1, []),
+
+            CellaIndex = getCellIndex(R, C, K),
+            AllapotCellak = feldarabolasa(NakedPairsOszlopAllapot1, {K, K}), 
+            AllapotCella = lists:nth(CellaIndex, AllapotCellak),
+            CellaLehetosegek = lists:map(fun({ Lehetosegek, _, _, _ }) -> Lehetosegek end, AllapotCella),
+            NakedPairsCella = eliminateByNakedPairs(CellaLehetosegek, AllapotCella),
+            setCella(R, C, K, NakedPairsCella, NakedPairsOszlopAllapot1);
+        false -> WNeighborFilter
+    end.
+
 
 % currentMin kezdetben K*K + 1, ha nincs kitoltetlen, akkor R és C 0
 minKitoltetlen([], _, _, Min) -> Min;
@@ -358,6 +510,25 @@ filterByCell(Values, Mezo, R, C, K, Cells) ->
 getValue([]) -> 0;
 getValue([Info|_Infos]) when is_integer(Info) -> Info;
 getValue([_|Infos]) -> getValue(Infos).
+
+countIfOccursOnce([], _, 1) -> true;
+countIfOccursOnce([], _, _) -> false;
+countIfOccursOnce(_L, _Value, Count) when Count > 1 -> false;
+countIfOccursOnce([Value|T], Value, Count) ->
+    Count1 = Count + 1,
+    countIfOccursOnce(T, Value, Count1);
+countIfOccursOnce([_|T], Value, Count) ->
+    countIfOccursOnce(T, Value, Count).
+
+countIfOccursTwice([], _, 2) -> true;
+countIfOccursTwice([], _, _) -> false;
+countIfOccursTwice(_L, _Value, Count) when Count > 2 -> false;
+countIfOccursTwice([Value|T], Value, Count) ->
+    Count1 = Count + 1,
+    countIfOccursTwice(T, Value, Count1);
+countIfOccursTwice([_|T], Value, Count) ->
+    countIfOccursTwice(T, Value, Count).
+   
 
 countValueOccurences([], _Value, Acc) -> Acc;
 countValueOccurences([H|T], Value, Acc) ->
