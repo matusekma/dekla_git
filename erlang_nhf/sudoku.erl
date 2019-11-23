@@ -1,6 +1,6 @@
 -module(sudoku).
 -author('matusekma@gmail.com').
--vsn('2019-11-21').
+-vsn('2019-11-22').
 -export([sudoku/1]).
 
 -type sspec() :: {size(), board()}.
@@ -71,7 +71,6 @@ osszesErtekkelKitoltEsFrissit(Allapot, {[Ertek | Lehetosegek], Field, Kitoltes, 
             % következő érték kipróbálása
             osszesErtekkelKitoltEsFrissit(Allapot, {Lehetosegek, Field, Kitoltes, OwnValue}, AllapotSor, RowIndex, ColIndex, AllValues, K, NewAcc).
 
-%assignHiddenSingleForRows(_, CurrentRowIndex, K, _, Allapot) when CurrentRowIndex > K*K -> Allapot;
 assignHiddenSingleForRows(ElsoSor, CurrentRowIndex, K, AllValues, ElozoAllapot) ->
     UjAllapot = assignHiddenSingleInRow(ElsoSor, AllValues, CurrentRowIndex, K, ElozoAllapot),
     case CurrentRowIndex + 1 =< K*K of
@@ -79,7 +78,7 @@ assignHiddenSingleForRows(ElsoSor, CurrentRowIndex, K, AllValues, ElozoAllapot) 
             KovetkezoSor = lists:nth(CurrentRowIndex + 1, UjAllapot),
             assignHiddenSingleForRows(KovetkezoSor, CurrentRowIndex + 1, K, AllValues, UjAllapot);
         false ->
-            ElozoAllapot
+            UjAllapot
     end.
 
 assignHiddenSingleInRow(_AllapotSor, [], _R, _K, Allapot) -> Allapot;
@@ -101,17 +100,15 @@ assignHiddenSingleInRow(AllapotSor, [Value | Values], R, K, Allapot) ->
             assignHiddenSingleInRow(UjAllapotSor, Values, R, K, UjAllapot)
     end.
 
-%assignHiddenSingleForCols(_, CurrentColIndex, K, _, Allapot) when CurrentColIndex > K*K -> Allapot;
 assignHiddenSingleForCols(ElsoOszlop, CurrentColIndex, K, AllValues, ElozoAllapot) ->
     UjAllapot = assignHiddenSingleInCol(ElsoOszlop, AllValues, CurrentColIndex, K, ElozoAllapot),
     case CurrentColIndex + 1 =< K*K of
         true ->
             KovetkezoOszlop = oszlop(UjAllapot, CurrentColIndex + 1),
             assignHiddenSingleForCols(KovetkezoOszlop, CurrentColIndex + 1, K, AllValues, UjAllapot);
-        false -> ElozoAllapot
+        false -> UjAllapot
     end.
 
-    
 
 assignHiddenSingleInCol(_AllapotOszlop, [], _C, _K, Allapot) -> Allapot;
 assignHiddenSingleInCol(AllapotOszlop, [Value | Values], C, K, Allapot) ->
@@ -331,7 +328,7 @@ eliminate(K, { R, C }, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot) ->
                 false -> SNeighborFilter
         end,
     
-    case K >= 1 of 
+    case K >= 4 of 
         true ->
 
             Sor = lists:nth(R, WNeighborFilter),
