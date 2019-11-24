@@ -1,23 +1,30 @@
-% :- type col  == int.
-% :- type row  == int.
-% :- type coords -->row-col.
-% :- pred ertekek(sspec::in, coords::in, list(int)::out).
-% ertekek(SSpec, R_C, Vals): 
-% Egy érték pontosan akkor szerepel a Vals listában, ha:
-%    (a) 1..k*k közötti egész, ahol k az SSpec feladvány cellamérete,
-%    (b) teljesíti az adott mezőre vonatkozó szám- és paritási infók
-%        által előírt megszorításokat, továbbá
-%    (c) különbözik az adott mezőt tartalmazó sor, oszlop és cella többi
-%        mezőjében szereplő száminfóktól, 
-% ahol
-%    SSpec az sspec típusspecifikációnak megfelelő Sudoku-feladvány,
-%    R_C az adott feladvány egy mezőjének (sor-oszlop formában megadott) koordinátája,
-%    Vals list(int) típusú mezőértéklista, az SSpec feladvány R_C koordinátájú
-%         mezőjében megengedett értékek listája. 
-
 :- use_module(library(lists)).
 :- use_module(library(between)).
 
+% :- type matrix == list(row).
+% :- type row == list(any).
+% :- type parameter ---> subRows-subCols.
+% :- type subRows == int.
+% :- type subCols == int.
+% :- pred feldarabolasa(+matrix, +parameter, ?list(list(any))).
+
+% :- type sspec ---> s(size, board).
+% :- type size  == int.
+% :- type field == list(info).
+% :- type info ---> e; o; s; w; v(int).
+% :- type board == list(list(field)).
+
+% ADATSTRUKTÚRA
+% :-type kitoltes == int.
+% :-type sajatertek == int.
+% :-type lehetosegek == list(int).
+% :-type allapotMezo() ---> s(lehetosegek, field, kitoltes, sajatertek).
+% :-type allapot == list(list(allapotMezo)).
+
+% :- type ssol == list(list(int)).
+
+% :- pred sudoku(sspec::in, ssol::out).
+% SSol az SSpec feladványt kielégítő megoldás.
 sudoku(s(K,F), SSol) :-
     K2 is K*K,
     numlist(1, K2, AllValues), 
@@ -33,7 +40,11 @@ sudoku(s(K,F), SSol) :-
 
     megold(KezdetiAllapot, AllValues, K, SSol).
 
-% SolAcc kezdetben ures tomb
+% :-pred megold(allapot::in, list(int)::in, int::in, ssol::out).
+% A sudoku eljárásban előállított kezdeti állapot alapján felsorolja
+% a megoldásokat. Először alkalmazza a Hidden Single
+% szabályt sorokra és oszlopokra, majd keres egy kitöltetlen cellát, és ha van, akkor a következő eljárás segítségével kitölti
+% minden lehetséges módon.
 megold(KezdetiAllapot, AllValues, K, SSol) :-
     K21 is K * K + 1,    
     [KezdetiAllapotElsoSor | _] = KezdetiAllapot,
@@ -58,17 +69,25 @@ megold(KezdetiAllapot, AllValues, K, SSol) :-
         
     ).
 
+% :-pred megoldasAllapotbol(allapot::in, ssol::out).
+% A bemenő Allapot-ból kinyerve a kitöltéseket kapjuk Megoldas-t.
 megoldasAllapotbol([], []).
 megoldasAllapotbol([AllapotSor | Allapot], Megoldas) :-
     megoldasSorAllapotSorbol(AllapotSor, MegoldasSor),
     Megoldas = [MegoldasSor | MaradekMegoldasSor],
     megoldasAllapotbol(Allapot, MaradekMegoldasSor).
-     
+
+% :-pred megoldasSorAllapotSorbol(list(allapotMezo)::in, list(int)::out).
+% A bemenő AllapotSor-ból kinyerve a kitöltéseket kapjuk a megoldás egy sorát.     
 megoldasSorAllapotSorbol([], []).
 megoldasSorAllapotSorbol([s(_, _, Kitoltes, _) | AllapotSor], MegoldasSor) :-
     MegoldasSor = [Kitoltes | MaradekMegoldasMezo],
     megoldasSorAllapotSorbol(AllapotSor, MaradekMegoldasMezo).
-                            
+
+% :-pred osszesErtekkelKitoltEsFrissit(allapot::in, allapotMezo::in, list(allapotMezo)::in, int::in, int::in, list(int)::in, int::in, Sol::ssol).
+% A 2. paraméterben kapott mezőt kitölti az egyik lehetséges értékkel, majd az eliminate függvénnyel frissíti
+% a feladvány állapotát, és meghívja a megold eljárást, hogy ehhez az állapothoz
+% találjon megoldást. Emellett kipróbálja rekurzívan a következő értéket is.                     
 osszesErtekkelKitoltEsFrissit(_Allapot, s([], _Field, _, _), _Sor, _RowIndex, _ColIndex, _AllValues, _K, _Sol) :- false.
 osszesErtekkelKitoltEsFrissit(Allapot, s([Ertek | Lehetosegek], Field, Kitoltes, OwnValue), AllapotSor, RowIndex, ColIndex, AllValues, K, Sol) :-
             (
@@ -96,8 +115,12 @@ osszesErtekkelKitoltEsFrissit(Allapot, s([Ertek | Lehetosegek], Field, Kitoltes,
                 
             ;   osszesErtekkelKitoltEsFrissit(Allapot, s(Lehetosegek, Field, Kitoltes, OwnValue), AllapotSor, RowIndex, ColIndex, AllValues, K, Sol)
             ).
-   
-%assignHiddenSingleForRows(_, CurrentRowIndex, K, _, Allapot) when CurrentRowIndex > K*K -> Allapot;
+
+% :-pred assignHiddenSingleForRows(list(allapotMezo)::in, int::in, int::in, list(int)::in, allapot::in, allapot::out).
+% Az aktuális állapot minden sorára alkalmazza a "Hidden Single" szabályt (lásd. dokumentáció),
+% és az új állapotot adja vissza a kimenő paraméterben.
+% CurrenRowIndex kezdetben 1, az aktuális sor, K és AllValues konstans szám és lista, az ElozoAllapot
+% pedig a frissítendő állapot.
 assignHiddenSingleForRows(ElsoSor, CurrentRowIndex, K, AllValues, ElozoAllapot, EredmenyAllapot) :-
     assignHiddenSingleInRow(ElsoSor, AllValues, CurrentRowIndex, K, ElozoAllapot, UjAllapot),
     (
@@ -109,6 +132,9 @@ assignHiddenSingleForRows(ElsoSor, CurrentRowIndex, K, AllValues, ElozoAllapot, 
         EredmenyAllapot = UjAllapot
     ).
 
+% :-pred assignHiddenSingleInRow(list(allapotMezo)::in, list(int)::in, int::in, int::in, allapot::in, allapot::out).
+% Az AllapotSor sorban alkalmazza a Hidden Single szabályt, azaz kitölti azokat
+% a mezőket, amelyekben a sorban egyedi érték lehetséges. Kimenő paramétere az új állapot.
 assignHiddenSingleInRow(_AllapotSor, [], _R, _K, Allapot, Allapot).
 assignHiddenSingleInRow(AllapotSor, [Value | Values], R, K, Allapot, EredmenyAllapot) :-
     (
@@ -131,7 +157,11 @@ assignHiddenSingleInRow(AllapotSor, [Value | Values], R, K, Allapot, EredmenyAll
         assignHiddenSingleInRow(AllapotSor, Values, R, K, Allapot, EredmenyAllapot)
     ).
 
-%assignHiddenSingleForCols(_, CurrentColIndex, K, _, Allapot) when CurrentColIndex > K*K -> Allapot;
+% :-pred assignHiddenSingleForCols(list(allapotMezo)::in, int::in, int::in, list(int)::in, allapot::in, allapot::out).
+% Az aktuális állapot minden oszlopára alkalmazza a "Hidden Single" szabályt (lásd. dokumentáció),
+% és az új állapotot adja vissza a kimenő paraméterben.
+% CurrenColIndex kezdetben 1, az aktuális sor, K és AllValues konstans szám és lista, az ElozoAllapot
+% pedig a frissítendő állapot.
 assignHiddenSingleForCols(ElsoOszlop, CurrentColIndex, K, AllValues, ElozoAllapot, EredmenyAllapot) :-
     assignHiddenSingleInCol(ElsoOszlop, AllValues, CurrentColIndex, K, ElozoAllapot, UjAllapot),
     (
@@ -144,7 +174,9 @@ assignHiddenSingleForCols(ElsoOszlop, CurrentColIndex, K, AllValues, ElozoAllapo
     ).
 
     
-
+% :-pred assignHiddenSingleInCol(list(allapotMezo)::in, list(int)::in, int::in, int::in, allapot::in, allapot::out).
+% Az AllapotOszlop oszlopban alkalmazza a Hidden Single szabályt, azaz kitölti azokat
+% a mezőket, amelyekben az oszlopban egyedi érték lehetséges. Kimenő paramétere az új állapot.
 assignHiddenSingleInCol(_AllapotOszlop, [], _C, _K, Allapot, Allapot).
 assignHiddenSingleInCol(AllapotOszlop, [Value | Values], C, K, Allapot, EredmenyAllapot) :-
     (
@@ -168,8 +200,10 @@ assignHiddenSingleInCol(AllapotOszlop, [Value | Values], C, K, Allapot, Eredmeny
         assignHiddenSingleInCol(AllapotOszlop, Values, C, K, Allapot, EredmenyAllapot)
     ).
 
+% :-pred countIfOccursOnceInLists(list(allapotMezo)::in, int::in, int::in, int::in, s(allapotmezo, int)::out).
+% Az állapotmezőkön végigmenve ellenőrzi, hogy a mezők lehetőséglistáiból csak 1-ben szerepel-e a Value érték.
+% Ha igen, akkor visszaadja a mezőt és a pozícióját a kimenő paraméterben, egyébként meghiúsul.
 countIfOccursOnceInLists([], _, _, 1, _FieldAndPosition).
-%countIfOccursOnceInLists([], _, _, _,Count) :- Count \= 1, false.
 countIfOccursOnceInLists([Field|T], Value, CurrentPosition, Count, FieldAndPosition) :-
     Count =< 1,
     s(Lehetosegek, _, _Kitoltes, _ ) = Field,
@@ -182,7 +216,12 @@ countIfOccursOnceInLists([Field|T], Value, CurrentPosition, Count, FieldAndPosit
     ;
         countIfOccursOnceInLists(T, Value, CurrentPosition1, Count, FieldAndPosition)
     ).
-                                                                                                                                                                                       
+  
+% :-pred eliminate(int::in, coords::in, allapotMezo::in, list(allapotMezo)::in, list(allapotMezo)::in, allapot::in, allapot::out).
+% Az R-C koordinátára behelyettesített KitoltottMezo mező az AllapotSor és AllapotOszlop sor és oszlop
+% metszetében van, az eliminate eljárás ezután a behelyettesítés után hoz létre új állapotot az alapszabályok,
+% a paritási szabályok és a Naked Pairs illetve Naked Triplets nevű szabályok alkalmazásával, a megmaradó lehetőségek szűrésével,
+% és az uj allapotot adja vissza kimenő paraméterében.                                                                                                                                                                                    
 eliminate(K, R-C, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot, UjAllapot) :-
     s(_Lehetseges, Field, Kitoltes, _OwnValue) = KitoltottMezo,
    
@@ -319,14 +358,19 @@ eliminate(K, R-C, KitoltottMezo, AllapotSor, AllapotOszlop, Allapot, UjAllapot) 
         UjAllapot = WNeighborFilter
     ).
                
-    
+% :-pred setOszlop(int::in, list(list(any))::in, any::in, list(list(any))::out).
+% Beállítja listák listája által képzett mátrixban a C-edik oszlopot, és visszaadja az új állapotot
+% kimenő paraméterében.   
 setOszlop(_, [], _, []).
 setOszlop(C, [ AllapotSor|AllapotSorok ], [OszlopElem | OszlopMaradek], Result) :- 
     setnth(C, AllapotSor, OszlopElem, UjAllapotSor),
     Result = [UjAllapotSor | Acc],
     setOszlop(C, AllapotSorok, OszlopMaradek, Acc).
 
-% FELULIRJA A KITOLTOTT MEZOT IS!
+% :-pred cellElimination(allapotMezo::in, int::in, int::in, int::in, allapot::in, allapot::out).
+% Megkeresi a kapott koordinátájú mezőt tartalmazó cellát, és a
+% KitoltottMezo kitöltése alapján kiszűri többi cellamezőből ezt az értéket,
+% és kimenő paraméterében visszaadja az új állapotot.
 cellElimination(_KitoltottMezo, _R, _C, _K, [], []).
 cellElimination(KitoltottMezo, R, C, K, Allapot, UjAllapot) :-
     s(_, _, Kitoltes, _ ) = KitoltottMezo,
@@ -336,6 +380,9 @@ cellElimination(KitoltottMezo, R, C, K, Allapot, UjAllapot) :-
     eliminateFromCell(Kitoltes, AllapotCella, UjCella),
     setCella(R, C, K, UjCella, Allapot, UjAllapot).
 
+% :-pred eliminateFromCell(int::in, list(allapotMezo)::in, list(allapotMezo)::out).
+% Egy cella mezőinek Lehetosegek listájából kiszűri a Kitoltes értékét, 
+% és kimenő paraméterében visszaadja az új cellát.
 eliminateFromCell(_KitoltottMezo, [], []).
 eliminateFromCell(Kitoltes, [s(Lehetosegek, Field, Ki, Value) | AllapotCella], [UjMezo | UjCellaMaradek]):-
     (
@@ -346,6 +393,10 @@ eliminateFromCell(Kitoltes, [s(Lehetosegek, Field, Ki, Value) | AllapotCella], [
     UjMezo = s(UjLehetosegek, Field, Ki, Value),
     eliminateFromCell(Kitoltes, AllapotCella, UjCellaMaradek).
 
+% :-pred eliminateByNakedPairs(list(list(int))::in, list(allapotMezo)::in, list(allapotMezo)::out).
+% Az EgysegLehetosegek tartalmazza egy sor, oszlop vagy cella (egység) mezőiben lévő lehetősegek listáját,
+% az eljárás erre alkalmazza a Naked Pairs (lásd. dokumentáció) szabályt, és visszaadja az EgeszEgyseg egység
+% eszerint módosított változatát kimenő paraméterében.
 eliminateByNakedPairs([], EgeszEgyseg, EgeszEgyseg).
 eliminateByNakedPairs([[A1, A2]| EgysegLehetosegek], EgeszEgyseg, UjEgyseg) :-
     (
@@ -359,7 +410,10 @@ eliminateByNakedPairs([ H | Egyseg], EgeszEgyseg, UjEgyseg) :-
     H \= [_,_],
     eliminateByNakedPairs(Egyseg, EgeszEgyseg, UjEgyseg).
 
-
+% :-pred eliminateByNakedTriplets(list(list(int))::in, list(allapotMezo)::in, list(allapotMezo)::out).
+% Az EgysegLehetosegek tartalmazza egy sor, oszlop vagy cella (egység) mezőiben lévő lehetősegek listáját,
+% az eljárás erre alkalmazza a Naked Triplets (lásd. dokumentáció) szabályt, és visszaadja az EgeszEgyseg egység
+% eszerint módosított változatát kimenő paraméterében.
 eliminateByNakedTriplets([], EgeszEgyseg, EgeszEgyseg).
 eliminateByNakedTriplets([[A1, A2, A3]| EgysegLehetosegek], EgeszEgyseg, UjEgyseg) :-
     (    
@@ -373,6 +427,9 @@ eliminateByNakedTriplets([ H | Egyseg], EgeszEgyseg, UjEgyseg) :-
     H \= [_,_,_],
     eliminateByNakedTriplets(Egyseg, EgeszEgyseg, UjEgyseg).
 
+% :-pred filterEgysegByNakedPairsOrTriplets(list(allapotMezo)::in, list(int)::in, list(allapotMezo)::out).
+% Elvégzi a bemenő egységre a 2. bemenő paraméterben megadott Pair vagy Triplet
+% által meghatározott szűrést, és kimenő paraméterében visszaadja az újat.
 filterEgysegByNakedPairsOrTriplets([], _, []).
 filterEgysegByNakedPairsOrTriplets([ s(Lehetosegek, Field, Ki, Value) | Egyseg], PairOrTriplet, UjEgyseg) :-
      (
@@ -385,6 +442,9 @@ filterEgysegByNakedPairsOrTriplets([ s(Lehetosegek, Field, Ki, Value) | Egyseg],
          filterEgysegByNakedPairsOrTriplets(Egyseg, PairOrTriplet, UjEgysegMaradek)
      ).
 
+% :-pred filterNotMember(list(any)::in, list(any)::in, list(any)::out).
+% Az első paraméterben megadott listából kimenő paraméterében visszaadja azon értékeket, melyek nem szerepelnek
+% a második lista értékei között.
 filterNotMember([], _FilterList, []).
 filterNotMember([Lehetoseg | Lehetosegek ], FilterList, UjLehetosegek) :-
     (
@@ -395,13 +455,19 @@ filterNotMember([Lehetoseg | Lehetosegek ], FilterList, UjLehetosegek) :-
         UjLehetosegek = [Lehetoseg | MaradekLehetosegek],
         filterNotMember(Lehetosegek, FilterList, MaradekLehetosegek)
     ).
-                      
+
+% :-pred setCella(int::in, int::in, int::in, list(allapotMezo)::in, allapot::in, allapot::out).    
+% Beállítja az R-C koordinátájú állapotmezőt tartalmazó cella mezőit 
+% a setCellaSoronként eljárással az UjCella értékeire, és visszaadja az új állapotot kimenő paraméterében.                  
 setCella(R, C, K, UjCella, Allapot, UjAllapot) :-
     % a cella elso sora és oszlopa
     ElsoSorIndex is ((R-1) div K)*K + 1,
     ElsoOszlopIndex is ((C-1) div K)*K + 1,
     setCellaSoronkent(1, ElsoSorIndex, ElsoOszlopIndex, 0, K, UjCella, Allapot, UjAllapot).    
 
+% :-pred setCellaSoronkent(int::in, int::in, int::in, int::in, int::in, list(allapotMezo)::in, allapot::in, allapot::out).
+% K hosszú sorrészletekre bontva soronként állítja be az UjCella cellát az ElsoSorIndex, ElsoOszlopIndex
+% bal felső sarok-koordinátájú cellaként az Allapot állapotban, és visszaadja az új állapotot kimenő paraméterében.
 % cellaSorindex 0-tól indul!
 setCellaSoronkent(SorIndex, ElsoSorIndex, _, _, K, _, AllapotMaradek, AllapotMaradek) :- 
     SorIndex >= ElsoSorIndex + K.
@@ -426,18 +492,10 @@ setCellaSoronkent(AktualisSorIndex, ElsoSorIndex, ElsoOszlopIndex, CellaSorIndex
         CellaSorIndex_1 is CellaSorIndex + 1,
         setCellaSoronkent(AktualisSorIndex_1, ElsoSorIndex, ElsoOszlopIndex, CellaSorIndex_1, K, UjCella, AllapotMaradek, UjAllapotMaradek)
     ).  
-     
-/*sublist([], _, _, _, _, _Acc).
-sublist([_|_], From, _Length, FromAcc, _Acc) :-
-    From > FromAcc. 
-sublist([H|T], From, Length, FromAcc, Acc) :-
-    Length >= 0,
-    From =< FromAcc,
-    Acc = [H|Rest],
-    Length1 is Length - 1,
-    FromAcc is FromAcc + 1,
-    sublist(T, From, Length1, FromAcc1, Rest).*/
-                               
+    
+% :-pred eliminateFromCol(allapotMezo::in, list(allapotMezo)::in, list(allapotMezo)::out).                               
+% A KitoltottMezo értéke alapján az AllapotOszlop mezőinek Lehetosegek listájából kiszűri a KitoltottMezo
+% Kitoltes-ét, és  visszaadja az új állapotoszlopot kimenő paraméterében.
 % FELULIRJA A KITOLTOTT MEZOT IS!
 eliminateFromCol(_KitoltottMezo, [], []).
 eliminateFromCol(KitoltottMezo, [ s(Lehetosegek, Field, Ki, Value) | AllapotOszlop], [UjMezo | UjAllapotOszlopMaradek]) :-
@@ -446,6 +504,9 @@ eliminateFromCol(KitoltottMezo, [ s(Lehetosegek, Field, Ki, Value) | AllapotOszl
     UjMezo = s(UjLehetosegek, Field, Ki, Value),
     eliminateFromCol(KitoltottMezo, AllapotOszlop, UjAllapotOszlopMaradek).
 
+% :-pred eliminateFromRow(allapotMezo::in, list(allapotMezo)::in, list(allapotMezo)::out).
+% A KitoltottMezo értéke alapján az AllapotSor mezőinek Lehetosegek listájából kiszűri a KitoltottMezo
+% Kitoltes-ét, és  visszaadja az új állapotsort.
 % FELULIRJA A KITOLTOTT MEZOT IS!
 eliminateFromRow(_KitoltottMezo, [], []).
 eliminateFromRow(KitoltottMezo, [ s(Lehetosegek, Field, Ki, Value) | AllapotSor], [UjMezo | UjAllapotSorMaradek]) :-
@@ -454,7 +515,9 @@ eliminateFromRow(KitoltottMezo, [ s(Lehetosegek, Field, Ki, Value) | AllapotSor]
     UjMezo = s(UjLehetosegek, Field, Ki, Value),
     eliminateFromRow(KitoltottMezo, AllapotSor, UjAllapotSorMaradek).   
 
-% currentMin kezdetben K*K + 1, ha nincs kitoltetlen, akkor R és C 0
+% :-pred minKitoltetlen(allapot::in, int::in, s(int, int, int)::in, s(int, int, int)::out).
+% Kikeresi az Allapot állapotban a minimális kitöltési lehetőséggel rendelkező kitöltetlen mező pozícióját.
+% currentMin kezdetben s(0, 0, K*K + 1), R pedig 0, ha nincs kitoltetlen, akkor a visszatérési érték a kezdeti
 minKitoltetlen([], _, Min, Min).
 minKitoltetlen([AllapotSor | AllapotSorok], R, CurrentMin, KitoltetlenHelye) :-
     sorMinimum(AllapotSor, R, 1, CurrentMin, RowMin),
@@ -472,44 +535,63 @@ sorMinimum([AllapotMezo | AllapotSor], R, CurrentC, s(MinR, MinC, Min), RowMin) 
     ;
         sorMinimum(AllapotSor, R, CurrentC1, s(MinR, MinC, Min), RowMin)
     ).
-    
+ 
+% :-pred kezdetiAllapot(list(list(int))::in, board::in, allapot::out).
+% A megoldás kezdetén előállított lehetséges értékekből és a feladványból
+% létrehozza a kezdeti adatstruktúrát.  
 kezdetiAllapot([], _, []).
 kezdetiAllapot([LehetsegesSor | LehetsegesMindenMezore], [Row | Rows], [AllapotSor | KezdetiAllapot]) :-
     map2(allapotMezo, LehetsegesSor, Row, AllapotSor),
     kezdetiAllapot(LehetsegesMindenMezore, Rows, KezdetiAllapot).
-    
+
+% :-pred allapotMezo(list(int)::in, field::in, allapotMezo::out)    
+% A paraméterként megkapott lehetőségek listájából és egy feladványmezőből előállít
+% egy adatstruktúrának megfelelő állapotmezőt kimenő paraméterében.
 % Kitöltés érték változó    
 allapotMezo(Lehetosegek, Field, s(Lehetosegek, Field, _Var, Value)) :-
     getValue(Field, Value).
-    
+
+% :-pred lehetsegesMindenMezore(board::in, int::in, int::in, int::in, list(field)::in, list(field)::in, list(int)::in, list(list(int))::in).
+% Az ertekek/8 eljárás használatával soronként meghatározza a feladvány mezőibe
+% behelyettesíthető értékek listáját, és kimenő paraméterében visszaadja az összes sor
+% összes mezőjére ezeket az értékeket.    
+% A többi paraméter segédparaméter vagy a mátrix oszlopai/cellái.
 lehetsegesMindenMezore([], _K2, _CurrentRowIndex, _K, _Cols, _Cells, _AllValues, []).
 lehetsegesMindenMezore([Row | Rows], K2, CurrentRowIndex, K, Cols, Cells, AllValues, [Ertekek | RestResult]) :-
     lehetsegesErtekSorra(Row, K, Row, Cols, Cells, CurrentRowIndex, AllValues, 1, Ertekek),
     NextRowIndex is CurrentRowIndex + 1,
     lehetsegesMindenMezore(Rows, K2, NextRowIndex, K, Cols, Cells, AllValues, RestResult).
-     
+
+% :-pred getCols(list(list(any))::in, int::in, int::in, list(list(any))::out).
+% Kimenő paraméterében visszaadja egy K2 méretű mátrix oszlopainak listáját.     
 getCols(_Mx, K2, IndexAcc, []) :-
-    IndexAcc > K2.
-                                                                                    
+    IndexAcc > K2.                                                                                  
 getCols(Mx, K2, IndexAcc, [Col | OtherCols]) :-
     IndexAcc =< K2,
     oszlop(Mx, IndexAcc, Col),
     IndexAcc1 is IndexAcc + 1,
     getCols(Mx, K2, IndexAcc1, OtherCols).
-    
+ 
+% :-pred setnth(int::in, list(any)::in, any::in, list(any)::out).
+% A második paraméterben kapott lista első paraméterben megadott
+% sorszámú elemét a harmadik paraméterben megadottra állítva kapjuk a kimenő paramétert.   
 setnth(1, [_|Rest], New, [New|Rest]).
 setnth(I, [E|Rest], New, [E|NewEnd]) :- 
     I > 1,
     I1 is I-1,
     setnth(I1, Rest, New, NewEnd).
                 
-% map 2 lists paralelly
+% :-pred map2(pred::in, list(any)::in, list(any)::in, list(any)::out).
+% 2 lista adott predikátummal való módosításával kapjuk a kimenő listát.
 map2(_Pred, [], _, []).
 map2(Pred, [H1 | T1], [H2 | T2], Result) :-
     call(Pred, H1, H2, Mapped),
     Result = [Mapped | Maradek],
     map2(Pred, T1, T2, Maradek).
 
+% :-pred lehetsegesErtekSorra(list(field)::in, int::in, list(field)::in, list(list(field))::in, list(list(field))::in, int::in, list(int)::in, int::in, list(int)::out).
+% Adott sorra a segédparaméterek és az értékek/8 predikátum segítségével
+% kiszámolja a behelyettesíthető értékeket.
 % sort ad vissza értékekkel, Cacc default 0
 lehetsegesErtekSorra([], _, _WholeRow, _Cols, _Cells, _R, _AllValues, _CAcc, []).
 lehetsegesErtekSorra([Field | RowTail], K, WholeRow, Cols, Cells, R, AllValues, CAcc, Ertekek) :-
@@ -518,6 +600,9 @@ lehetsegesErtekSorra([Field | RowTail], K, WholeRow, Cols, Cells, R, AllValues, 
     CAcc1 is CAcc + 1,
     lehetsegesErtekSorra(RowTail, K, WholeRow, Cols, Cells, R, AllValues, CAcc1, MaradekMezoErtekek).
 
+% :-pred ertekek(int::in, coords::in, field::in, list(int)::in, list(list(field))::in, list(field)::in, list(list(field))::in, list(int)::out).
+% A Vals lista az SSpec specifikáció alapján az R-C koordinátájú mezőben megengedett értékek listája.
+% A Cells a specifikáció celláinak listája, a Row és a Col pedig adott sora és oszlopai, AllValues 1-től K*K-ig az egész számok.
 ertekek(K, R-C, Field, AllValues, Cells, Row, Cols, Vals) :-
     nth1(C, Cols, Col),
 
@@ -582,7 +667,9 @@ ertekek(K, R-C, Field, AllValues, Cells, Row, Cols, Vals) :-
         Vals = SFilter
     ).
 
-
+% :-pred filterByConstraints(field::in, list(field)::in, list(field)::in, int::in, int::in, list(int)::in, list(int)::out).
+% A Field mező kényszerei (e,o,s,w) alapján szűri annak lehetséges értékeit, és a Result listában adja vissza azokat.
+% Row, Col, R, és C rendre a feladvány adott sora és oszlopa illetve azok sorszámai.
 filterByConstraints([], _Row, _Col, _R, _C, Values, Values).
 
 filterByConstraints([e | FieldTail], Row, Col, R, C, Values, Result) :-
@@ -631,7 +718,9 @@ filterByConstraints([w | FieldTail], Row, Col, R, C, Values, Result) :-
 filterByConstraints([v(Number)|FieldTail], Row, Col, R, C, _Values, Result) :- 
         filterByConstraints(FieldTail, Row, Col, R, C, [Number], Result).
 
-% A sorban/oszlopban/cellában lévő többi szám alapján szűr
+% :-pred filterByUnit(list(field)::in, list(int)::in, list(int)::out).
+% A sorban/oszlopban lévő többi szám alapján szűri a Values listában található
+% lehetőségeket, és a szűrt Result listát adja vissza.
 filterByUnit([], Values, Values).
 filterByUnit([Field | Fields], Values, Result) :-
         getValue(Field, Value),
@@ -644,6 +733,9 @@ filterByUnit([Field | Fields], Values, Result) :-
                 filterByUnit(Fields, Values, Result)
         ).
 
+% :-pred filterByCell(list(field)::in, list(int)::in, int::in, list(int)::out).
+% A cellában lévő többi szám alapján szűri a Values listában található
+% lehetőségeket, és a szűrt Result listát adja vissza. 
 filterByCell([], Values, _OwnValue, Values).
 % field has no value
 filterByCell([Field | Fields], Values, OwnValue, Result) :-
@@ -668,10 +760,10 @@ filterByCell(Fields, Values, OwnValue, Result) :-
         ;   
             Result = Values
         ).
-      
+
+%countIfOccursOnce(any::in, any::in, int::in).
+% Egy listában Value érték 1-szer szerepel-e. Ha igen, siker, ha nem, meghiúsul. Count az akkumulátor.    
 countIfOccursOnce([], _, 1).
-/*countIfOccursOnce([], _, Count) :- Count =\= 1, false.
-countIfOccursOnce(_L, _Value, Count) :- Count > 1, false.*/
 countIfOccursOnce([Value|T], Value, Count) :-
     Count1 is Count + 1,
     Count1 =< 1,
@@ -681,9 +773,9 @@ countIfOccursOnce([H|T], Value, Count) :-
     H \= Value,
     countIfOccursOnce(T, Value, Count).
 
+%countIfOccursTwice(any::in, any::in, int::in).
+% Egy listában Value érték 2-szer szerepel-e. Ha igen, siker, ha nem, meghiúsul. Count az akkumulátor. 
 countIfOccursTwice([], _, 2).
-/*countIfOccursTwice([], _, Count) :-  Count=\= 2, false.
-countIfOccursTwice(_L, _Value, Count) :- Count > 2, false;*/
 countIfOccursTwice([Value|T], Value, Count) :-
     Count1 is Count + 1,
     Count1 =< 2,
@@ -693,6 +785,9 @@ countIfOccursTwice([H|T], Value, Count) :-
     H \= Value,
     countIfOccursTwice(T, Value, Count).
 
+% :-pred countValueOccurences(list(any)::in, any::in, int::in, int::out).
+% Adott listában a Value érték Count-szor szerepel.
+% Acc kezdetben 0
 countValueOccurences([], _Value, Acc, Acc).
 countValueOccurences([H|T], Value, Acc, Result) :-
         (
@@ -702,7 +797,10 @@ countValueOccurences([H|T], Value, Acc, Result) :-
         ;       % else
                 countValueOccurences(T, Value, Acc, Result)
         ).   
-                                                         
+
+% :-pred excludeEqual(any::in, list(any)::in, list(any)::out).  
+% A Value értéket kiveszi a 2. paraméterben kapott listából,
+% és a kapott listát a kimenő paraméterben adja vissza.                                                       
 excludeEqual(_Value, [], []).
 
 excludeEqual(Value, [H|T], Excluded) :-
@@ -713,17 +811,22 @@ excludeEqual(Value, [H|T], Excluded) :-
         H =\= Value,
         Excluded = [H | Maradek],
         excludeEqual(Value, T, Maradek).                     
-                                     
+
+% Egyenlőséget, páros, páratlan tulajdonságot vizsgáló predikátumok.                                     
 equal(X, Value) :- X =:= Value.
 even(X) :- X mod 2 =:= 0.
 odd(X) :- X mod 2 =:= 1.
 
+% :-pred getValue(field::in, int;var::out).
+% Visszaadja a Field mezőben található értéket, ha van, egyébként változót. 
 getValue([], _Var).     % return unassigned if no value
 getValue([v(Info)|_Infos], Info).
 getValue([Info|Infos], Value) :-
         Info \= v(_Number),
         getValue(Infos, Value).
 
+% :-pred getAllValues(list(field)::in, list(int)::in, list(int)::out).
+% Visszaadja a Field listában található értékek listáját a kimenő paraméterben. 
 getAllValues([], Acc, Acc).
 getAllValues([Field|Fields], Acc, Result) :-
         getValue(Field, Value),
@@ -734,34 +837,36 @@ getAllValues([Field|Fields], Acc, Result) :-
             getAllValues(Fields, Acc, Result)
         ).    
 
+% :-pred getLehetosegek(list(allapotMezo)::in, list(list(int))::out).
+% A bemenő mezőlistából előállítja a kimenő paraméterben a lehetséges behelyettesítési
+% értékek listáit.
 getLehetosegek([], []).
 getLehetosegek([AllapotMezo | AllapotMezok], LehetosegListak) :-
     s(Lehetosegek, _, _, _) = AllapotMezo,
     LehetosegListak = [Lehetosegek | Maradek],
     getLehetosegek(AllapotMezok, Maradek).
 
-% Visszaadja, hogy az adott koordinátájú mező hányadik cellában van a feldarabolásban
+% :-pred getCellIndex(int::in, int::in, int::in, int::in).
+% Visszaadja kimenő paraméterében, hogy az adott koordinátájú mező hányadik cellában van a feldarabolásban.
 getCellIndex(R, C, K, Index) :-
         %sorszam 0-tol
             Sorszam is (R-1) * K * K + C - 1,
-            % index, if devided to pieces K x 1
+            
             Chunk is Sorszam div K,
-            % every row has K of those pieces and there are K rows in each box
+            % minden sorban K darab és minden cellában K sor
             Row is Chunk div (K*K),
             Col is Chunk rem K,
             Index is Row * K + Col + 1.
 
 removeFromList(Index, List, Result) :- nth1(Index, List, _, Result).                         
 
-% visszaadja az SSpec specifikációval megadott Sudoku-feladvány C-edik oszlopát
+% :-pred oszlop(matrix::in, int::in, list(any)::out).
+% visszaadja az SSpec specifikációval megadott Sudoku-feladvány vagy más mátrix C-edik oszlopát
 oszlop([], _C, []).
 oszlop([Row| Rows], C, Col) :- 
         nth1(C, Row, Field),
         Col = [Field | Maradek],
         oszlop(Rows, C, Maradek).
-
-% visszaadja az SSpec specifikációval megadott Sudoku-feladvány R-edik sorát  
-sor(SSpec, R, Row) :- nth1(R, SSpec, Row).
 
 take([], _, []).
 take(L, 0, []) :- L \= [].
@@ -771,8 +876,6 @@ take([H|T], R, Acc) :-
         Acc = [H|Vegebol],
         take(T, R1, Vegebol).
 
-/*take(L, N, P) :- prefix_length(L, P, N).
-drop(L, N, P) :- suffix_length(L, P, N).    */
 drop([], _, []).
 drop(L, 0, L) :- L \= [].
 drop([_|T], N, Eredmeny) :- 
@@ -780,8 +883,9 @@ drop([_|T], N, Eredmeny) :-
         N1 is N-1, 
         Eredmeny = Acc,
         drop(T, N1, Acc).
-        
-             
+     
+% :-pred vizszintesen(matrix::in, int::in, list(list(any))::out).   
+%% Mx mátrix R soronkénti feldarabolása LL listák listája (R sorú sorcsoportok)             
 vizszintesen([], _, []).
 vizszintesen(Mx, R, LL) :- 
         Mx \= [],
@@ -790,6 +894,7 @@ vizszintesen(Mx, R, LL) :-
         LL = [Eleje | Maradek],
         vizszintesen(Vege, R, Maradek).
 
+% :-pred fuggolegesenIedikOszlopcsoportra(list(list(any))::in, int::in, int::in, list(list(any))::out).
 % létrehozza az I-edik fuggoleges vágást
 fuggolegesenIedikOszlopcsoportra([], _C, _I, []).
 fuggolegesenIedikOszlopcsoportra([H|T], C, I, Acc) :- 
@@ -799,8 +904,9 @@ fuggolegesenIedikOszlopcsoportra([H|T], C, I, Acc) :-
         take(Vege, C, E),
         append(E, A, Acc),
         fuggolegesenIedikOszlopcsoportra(T, C, I, A).
-                           
-% felvág 1 sorcsoportot C oszloponként, I az oszlopcsoport sorszáma, 0-tól indul
+
+% :-pred fuggolegesenEgySorCsoportot(list(list(any))::in, int::in, int::in, list(list(any))::out).                          
+% felvág 1 sorcsoportot, azaz valahány egymás utáni sort C oszloponként, I az oszlopcsoport sorszáma, 0-tól indul
 fuggolegesenEgySorCsoportot([HLss| TLss], C, I, Acc) :- 
         length(HLss, Hossz),
         ((I+1) * C) < Hossz,
@@ -816,7 +922,8 @@ fuggolegesenEgySorCsoportot([HLss| TLss], C, I, Acc) :-
         Acc = [Maradek | []],
         fuggolegesenIedikOszlopcsoportra([HLss| TLss], C, I, Maradek).
         
-
+% :-pred sudoku:fuggolegesen(list(list(any))::in, int::in, list(list(any))::out).
+% C oszloponként függőlegesen felvágja a sorcsoportokat.
 fuggolegesen([], _C, []).
 fuggolegesen([HLss | TLss], C, Acc) :- 
         [HLss | TLss] \= [],
@@ -824,6 +931,8 @@ fuggolegesen([HLss | TLss], C, Acc) :-
         append(F, Acc0, Acc),
         fuggolegesen(TLss, C, Acc0).
 
+% :-pred feldarabolasa(matrix::in, parameter::in, list(list(any))).
+%% Az MX mátrix SubRows-SubCols paraméterű feldarabolása az LL lista.
 feldarabolasa(Mx, SubRows-SubCols, LL) :- 
         vizszintesen(Mx, SubRows, V),
         fuggolegesen(V, SubCols, LL).

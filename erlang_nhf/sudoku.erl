@@ -1,6 +1,6 @@
 -module(sudoku).
 -author('matusekma@gmail.com').
--vsn('2019-11-23').
+-vsn('2019-11-24').
 -export([sudoku/1]).
 
 -type sspec() :: {size(), board()}.
@@ -274,7 +274,7 @@ eliminateByNakedTriplets([ _ | Egyseg], EgeszEgyseg) ->
 
 -spec sudoku:setCella(R :: integer(), C :: integer(), K  :: integer(), UjCella :: [allapotMezo()], RegiAllapot :: allapot()) -> UjAllapot :: allapot().
 % Beállítja az R,C koordinátájú állapotmezőt tartalmazó cella mezőit 
-% a setCellaSoronként fügvénnyel az UjCella értékeire, és visszaadja az új állapotot.
+% a setCellaSoronként függvénnyel az UjCella értékeire, és visszaadja az új állapotot.
 setCella(R, C, K, UjCella, Allapot) ->
     % a cella elso sora és oszlopa
     ElsoSorIndex = ((R-1) div K)*K + 1,
@@ -443,7 +443,7 @@ minKitoltetlen([AllapotSor | AllapotSorok], R, AllValues, CurrentMin) ->
 
 
 -spec sudoku:setnth(N :: integer(), L :: [any()], E :: any()) -> NewL :: [any()].
-% Beállítja az L lista N-edik elemét E-re
+% Az L lista N-edik elemét E-re
 % állítva kapjuk NewL-t.
 setnth(1, [_|Rest], New) -> [New|Rest];
 setnth(I, [E|Rest], New) -> [E|setnth(I-1, Rest, New)].
@@ -467,7 +467,7 @@ lehetsegesErtekSorra([Field | RowTail], K, WholeRow, Cols, Cells, R, AllValues, 
 
 -spec sudoku:ertekek(SSpec :: sspec(), R_C :: coords(), Field :: field(), AllValues :: [integer()], Cells :: [[field()]], Row :: [field()], Col :: [field()] ) -> Vals :: [integer()].
 % A Vals lista az SSpec specifikáció alapján az R,C koordinátájú mezőben megengedett értékek listája.
-% A Cells a specifikáció celláinak listája, a Row és a Col pedig adott oszlopa.
+% A Cells a specifikáció celláinak listája, a Row és a Cols pedig adott sora és oszlopai.
 ertekek(K, { R, C }, Field, AllValues, Cells, Row, Cols) ->
     Col = lists:nth(C, Cols),
     
@@ -637,7 +637,7 @@ getCellIndex(R, C, K) ->
     Sorszam = (R-1) * K * K + C - 1,
     
     Chunk = Sorszam div K,
-    % mindensorban K darab és minden cellában K sor
+    % minden sorban K darab és minden cellában K sor
     Row = Chunk div (K*K),
     Col = Chunk rem K,
     % 1-től indexelünk
